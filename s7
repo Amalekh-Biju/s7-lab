@@ -7,11 +7,13 @@ ENV_FILE="$DIR/.env"
 CFG="$DIR/.s7config"
 HIST_FILE="$DIR/.s7chat_history"
 
+_CLI_VERCEL="${S7_VERCEL_URL:-}"
+_CLI_CF="${S7_CF_URL:-}"
 [ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
 [ -f "$CFG" ] && source "$CFG"
 
-VERCEL_URL="${VERCEL_URL:-${S7_VERCEL_URL:-https://arxec-lab.vercel.app}}"
-CF_URL="${CF_URL:-${S7_CF_URL:-}}"
+VERCEL_URL="${_CLI_VERCEL:-${VERCEL_URL:-${S7_VERCEL_URL:-https://arxec-lab.vercel.app}}}"
+CF_URL="${_CLI_CF:-${CF_URL:-${S7_CF_URL:-}}}"
 API_KEY="${API_KEY:-${S7_API_KEY:-${GEMINI_API_KEY:-}}}"
 ACTIVE_EXP=""
 
@@ -647,44 +649,33 @@ clean_output() {
     sed 's/\\n/\n/g; s/\\"/\"/g; s/\\\\/\\/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g' | sed '/^```/d'
 }
 
-LAB_CONTEXT="You are a concise Linux terminal assistant for B.Tech CSE Cyber Security S7 Lab (Ubuntu/Kali). Give brief, copy-paste ready commands/payloads.
-Lab Syllabus:
-Exp 1: Recon concepts (Passive: theHarvester, Maltego, Recon-ng, Shodan | Active: Nmap, Burp, ZAP, Nikto, Gobuster, FFUF).
-Exp 2: Recon-ng on tesla.com (workspaces create testspace; modules: recon/domains-hosts/hackertarget, recon/domains-contacts/whois_pocs, recon/domains-hosts/brute_hosts, recon/domains-hosts/bing_domain_web; options set SOURCE tesla.com; run; show hosts).
-Exp 3: Maltego (Footprint L1 testphp.vulnweb.com), Nmap (-sn, -sV, -O, -p-, -A, -Pn, -T4, -F), Gobuster (gobuster dir -u http://<IP> -w /usr/share/wordlists/dirb/common.txt), FFUF (ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt).
-Exp 4: DNSRecon (dnsrecon -d tesla.com -t std --xml tesla_dns.xml; -t brt -D subdomains.txt), theHarvester (-d tesla.com -b bing), Dig (dig tesla.com, +short NS/MX), Google Dorks (inurl:admin, intitle:login, filetype:php).
-Exp 5: WPScan (wpscan --url http://<IP> --enumerate u,vp,vt), NVD (CVE/CVSS/CWE), OWASP ZAP (127.0.0.1:8080, Traditional/AJAX Spider, Active Scan), Hydra (hydra -l elliot -P rockyou.txt <IP> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password').
-Exp 6: OWASP Juice Shop (:42000). Firefox localhost proxy fix: about:config -> network.proxy.allow_hijacking_localhost=true. Burp Intruder Cluster Bomb on login (uncheck '.' in Payload Encoding; finds admin@juice-sh.op:admin123). Jim reset (jim@juice-sh.op, Star Trek Kirk's eldest brother's middle name = Samuel).
-Exp 7: DVWA SQLi & Blind SQLi (Low security, admin:password). Classic: 1', 1' OR '1'='1, 1' UNION SELECT null, version() #, 1' UNION SELECT null, table_name FROM information_schema.tables #, 1' UNION SELECT user, password FROM users #. Blind: 1' AND 1=1 #, 1' AND SUBSTRING(database(),1,1)='d' #. SQLMap: sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=<COOKIE>; security=low\" -D dvwa -T users --dump --batch --threads 5.
-Exp 8: DVWA XSS (Low). Stored HTML: <h1>Website Defaced by Student</h1>; Cookie theft: <script>alert('Cookies: ' + document.cookie)</script>; Reflected: <button onclick=\"alert('1')\">Click Me!</button>; DOM URL: ?default=<script>alert('DOM XSS')</script>; Stored Event: <div onmouseover=alert(1)>Hover</div>."
-
 send_ai_query() {
     local q="$1"
     if [ "${q,,}" = "clear" ] || [ "${q,,}" = "/clear" ]; then
         rm -f "$HIST_FILE"
+        for ep in "${VERCEL_URL%/}" "${CF_URL%/}"; do
+            [ -n "$ep" ] && curl -sS --max-time 5 -X POST "$ep/ask" -H "Content-Type: text/plain" --data-raw "clear" >/dev/null 2>&1 || true
+        done
         echo "Conversation history cleared."
         return 0
     fi
 
-    local recent_hist=""
-    [ -f "$HIST_FILE" ] && recent_hist=$(tail -n 16 "$HIST_FILE")
-
-    local full_prompt="$LAB_CONTEXT"
-    [ -n "$ACTIVE_EXP" ] && full_prompt="$full_prompt
-[User is currently viewing Experiment $ACTIVE_EXP]"
-    [ -n "$recent_hist" ] && full_prompt="$full_prompt
-
-Recent Conversation History:
-$recent_hist"
-    full_prompt="$full_prompt
-
-User: $q"
+    local payload="$q"
+    if [ -f "$HIST_FILE" ]; then
+        local recent
+        recent=$(tail -n 8 "$HIST_FILE")
+        [ -n "$recent" ] && payload=$(printf "Recent Conversation:\n%s\n\nUser: %s" "$recent" "$q")
+    fi
 
     local ans=""
     for ep in "${VERCEL_URL%/}" "${CF_URL%/}"; do
         [ -z "$ep" ] && continue
         local res
-        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" -H "Content-Type: text/plain" ${API_KEY:+-H "X-API-Key: $API_KEY"} --data-raw "$full_prompt" 2>/dev/null) && [ -n "$res" ] && ! [[ "$res" == "[ERROR]"* ]]; then
+        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" \
+            -H "Content-Type: text/plain" \
+            ${ACTIVE_EXP:+-H "X-Exp: $ACTIVE_EXP"} \
+            ${API_KEY:+-H "X-API-Key: $API_KEY"} \
+            --data-raw "$payload" 2>/dev/null) && [ -n "$res" ] && ! [[ "$res" == "[ERROR]"* ]]; then
             ans=$(echo "$res" | clean_output)
             break
         fi
@@ -692,7 +683,7 @@ User: $q"
 
     if [ -z "$ans" ] && [ -n "$API_KEY" ]; then
         local esc_q
-        esc_q=$(printf '%s' "$full_prompt" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+        esc_q=$(printf '%s' "Concise Linux terminal answer: $payload" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
         for m in gemini-3.5-flash-lite gemini-3.1-flash-lite gemini-2.5-flash gemma-4-26b-a4b-it; do
             local raw
             raw=$(curl -sS --max-time 25 "https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}" \
@@ -709,12 +700,12 @@ User: $q"
         printf "%s\n" "$ans"
         {
             printf "User: %s\n" "$q"
-            printf "Assistant: %s\n" "$(echo "$ans" | tr '\n' ' ' | cut -c 1-400)"
+            printf "Assistant: %s\n" "$(echo "$ans" | tr '\n' ' ' | cut -c 1-300)"
         } >> "$HIST_FILE"
         return 0
     fi
 
-    echo "Error: Set your proxy URL via './s7 cfg --vercel <URL>' (or set GEMINI_API_KEY in .env)." >&2
+    echo "Error: Could not reach proxy ($VERCEL_URL). Check connection or './s7 cfg'." >&2
     return 1
 }
 
