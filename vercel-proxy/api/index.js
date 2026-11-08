@@ -377,7 +377,10 @@ module.exports = async function handler(req, res) {
     let prompt = parsedUrl.searchParams.get("q") || "";
     if (!prompt && req.method === "POST") {
       if (typeof body === "string") prompt = body;
-      else if (body && typeof body === "object") prompt = body.prompt || body.q || "";
+      else if (Buffer.isBuffer(body)) prompt = body.toString("utf8");
+      else if (body && typeof body === "object") {
+        prompt = body.prompt || body.q || Object.entries(body).map(([k, v]) => (v ? `${k}=${v}` : k)).join("&");
+      }
     }
     const result = await handleAIRequest({ prompt, search: true }, process.env, req.headers);
     res.statusCode = result.status || 200;

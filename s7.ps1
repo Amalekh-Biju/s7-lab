@@ -14,7 +14,7 @@ if (Test-Path $EnvFile) {
 }
 $CfgFile = Join-Path $PSScriptRoot ".s7config.json"
 $Cfg = @{
-    vercel = $env:S7_VERCEL_URL
+    vercel = if ($env:S7_VERCEL_URL) { $env:S7_VERCEL_URL } else { "https://arxec-lab.vercel.app" }
     cf     = $env:S7_CF_URL
     key    = if ($env:S7_API_KEY) { $env:S7_API_KEY } else { $env:GEMINI_API_KEY }
 }
@@ -287,9 +287,11 @@ function Send-AIQuery([string]$q) {
     foreach ($u in @($Cfg.vercel, $Cfg.cf)) {
         if (-not $u) { continue }
         try {
-            $res = Invoke-RestMethod -Uri ($u.TrimEnd('/') + "/ask") -Method Post -Body $fullPrompt -TimeoutSec 35
-            $ans = ($res -replace '```[a-z]*', '').Trim()
-            if ($ans) { break }
+            $res = Invoke-RestMethod -Uri ($u.TrimEnd('/') + "/ask") -Method Post -ContentType "text/plain; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($fullPrompt)) -TimeoutSec 35
+            if ($res -and -not $res.StartsWith("[ERROR]")) {
+                $ans = ($res -replace '```[a-z]*', '').Trim()
+                if ($ans) { break }
+            }
         } catch {}
     }
     if (-not $ans -and $Cfg.key) {

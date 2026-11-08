@@ -10,7 +10,7 @@ HIST_FILE="$DIR/.s7chat_history"
 [ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
 [ -f "$CFG" ] && source "$CFG"
 
-VERCEL_URL="${VERCEL_URL:-${S7_VERCEL_URL:-}}"
+VERCEL_URL="${VERCEL_URL:-${S7_VERCEL_URL:-https://arxec-lab.vercel.app}}"
 CF_URL="${CF_URL:-${S7_CF_URL:-}}"
 API_KEY="${API_KEY:-${S7_API_KEY:-${GEMINI_API_KEY:-}}}"
 ACTIVE_EXP=""
@@ -684,7 +684,7 @@ User: $q"
     for ep in "${VERCEL_URL%/}" "${CF_URL%/}"; do
         [ -z "$ep" ] && continue
         local res
-        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" ${API_KEY:+-H "X-API-Key: $API_KEY"} -d "$full_prompt" 2>/dev/null) && [ -n "$res" ]; then
+        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" -H "Content-Type: text/plain" ${API_KEY:+-H "X-API-Key: $API_KEY"} --data-raw "$full_prompt" 2>/dev/null) && [ -n "$res" ] && ! [[ "$res" == "[ERROR]"* ]]; then
             ans=$(echo "$res" | clean_output)
             break
         fi
