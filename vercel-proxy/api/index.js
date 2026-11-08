@@ -548,20 +548,41 @@ module.exports = async function handler(req, res) {
 
   if (pathName === "/" || pathName === "/help" || pathName === "/health" || pathName === "/api/health") {
     const helpText = [
-      "S7 Lab AI Proxy + Server-Side RAG (Online)",
+      "S7 Lab — Quick Terminal Cheat Sheet",
       "",
-      "1. Download & Run Full CLI (Ubuntu / Linux):",
+      "1. Download & Start Interactive Tool (Ubuntu / Linux):",
       `   curl -sL ${baseUrl}/s7 -o s7 && chmod +x s7 && ./s7`,
       "",
-      "2. Download & Run Full CLI (Windows PowerShell):",
-      `   irm ${baseUrl}/s7.ps1 -OutFile s7.ps1; .\\s7.ps1`,
+      "2. Once Downloaded, Use ./s7 Commands:",
+      "   ./s7              # Interactive menu (Arrows or 1-8, c=cmds, s=search, a=AI)",
+      "   ./s7 <1-8>        # Full instructions + commands for Experiment 1-8",
+      "   ./s7 c <1-8>      # Commands-Only mode (e.g. ./s7 c 7)",
+      "   ./s7 s <keyword>  # Search all experiments (e.g. ./s7 s hydra)",
+      "   ./s7 ai           # Continuous multi-turn AI chat",
+      "   ./s7 ai \"query\"   # One-line AI question",
+      "   ./s7 help         # Full help & keybindings",
       "",
-      "3. Direct AI Query (No download):",
-      `   curl -s "${baseUrl}/ask?q=exp+7+sqlmap+command"`,
+      "3. Direct curl Commands (Without downloading s7):",
+      `   curl -sL ${baseUrl}/1   (or /2 .. /8 for any experiment)`,
+      `   curl -sL ${baseUrl}/ask -d "your question here"`,
+      "",
+      "4. Windows PowerShell (use 'irm' or 'curl.exe', not 'curl'):",
+      `   irm ${baseUrl}`,
+      `   irm ${baseUrl}/s7.ps1 -OutFile s7.ps1; .\\s7.ps1`,
+      `   curl.exe -sL ${baseUrl}/7`,
     ].join("\n");
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     return res.end(helpText + "\n");
+  }
+
+  // Direct curl /1 .. /8 to view experiment without downloading script
+  const expMatch = pathName.match(/^\/([1-8])$/);
+  if (expMatch) {
+    const doc = LAB_RAG_DOCS.find((d) => d.id === Number(expMatch[1]));
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    return res.end((doc ? doc.content : "Not found") + "\n");
   }
 
   let body = req.body;

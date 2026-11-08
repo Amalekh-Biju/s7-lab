@@ -452,10 +452,38 @@ export default {
     }
 
     if (pathName === "/" || pathName === "/help" || pathName === "/health") {
-      return new Response(
-        `S7 Lab AI Proxy + Server-Side RAG (Online)\n\n  curl -s "${url.origin}/ask?q=exp+7+sqlmap+command"\n`,
-        { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "text/plain; charset=utf-8" } }
-      );
+      const helpText = [
+        "S7 Lab — Quick Terminal Cheat Sheet",
+        "",
+        "1. Download & Start Interactive Tool (Ubuntu / Linux):",
+        "   curl -sL https://arxec-lab.vercel.app/s7 -o s7 && chmod +x s7 && ./s7",
+        "",
+        "2. Once Downloaded, Use ./s7 Commands:",
+        "   ./s7              # Interactive menu (Arrows or 1-8, c=cmds, s=search, a=AI)",
+        "   ./s7 <1-8>        # Full instructions + commands for Experiment 1-8",
+        "   ./s7 c <1-8>      # Commands-Only mode (e.g. ./s7 c 7)",
+        "   ./s7 s <keyword>  # Search all experiments (e.g. ./s7 s hydra)",
+        "   ./s7 ai           # Continuous multi-turn AI chat",
+        "   ./s7 ai \"query\"   # One-line AI question",
+        "   ./s7 help         # Full help & keybindings",
+        "",
+        "3. Direct curl Commands (Without downloading s7):",
+        `   curl -sL ${url.origin}/1   (or /2 .. /8 for any experiment)`,
+        `   curl -sL ${url.origin}/ask -d "your question here"`,
+      ].join("\n");
+      return new Response(helpText + "\n", {
+        status: 200,
+        headers: { ...CORS_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
+    const expMatch = pathName.match(/^\/([1-8])$/);
+    if (expMatch) {
+      const doc = LAB_RAG_DOCS.find((d) => d.id === Number(expMatch[1]));
+      return new Response((doc ? doc.content : "Not found") + "\n", {
+        status: 200,
+        headers: { ...CORS_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
+      });
     }
 
     if (pathName === "/api/chat" && request.method === "POST") {

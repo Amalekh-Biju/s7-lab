@@ -1,5 +1,22 @@
 # s7-lab
 
+If you forget everything tomorrow, just type this one command in any terminal to see all commands:
+```bash
+# Ubuntu / Linux / Windows CMD:
+curl -sL https://arxec-lab.vercel.app
+
+# Windows PowerShell (use curl.exe or irm):
+curl.exe -sL https://arxec-lab.vercel.app
+irm https://arxec-lab.vercel.app
+```
+
+Or launch the full tool directly in 1 line:
+```bash
+curl -sL arxec-lab.vercel.app/s7 -o s7 && bash s7
+```
+
+---
+
 Terminal reference for all 8 S7 Cyber Security Lab experiments + Vercel/Cloudflare AI proxy.
 No Python or extra packages required (`s7` uses pure Bash on Linux; `s7.ps1` uses native PowerShell on Windows).
 
