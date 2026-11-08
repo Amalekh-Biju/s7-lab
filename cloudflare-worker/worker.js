@@ -451,12 +451,37 @@ export default {
       }
     }
 
+    if (pathName === "/s7" || pathName === "/cli") {
+      const ghResp = await fetch("https://raw.githubusercontent.com/Amalekh-Biju/s7-lab/main/s7");
+      if (ghResp.ok) {
+        let script = await ghResp.text();
+        // Inject this Cloudflare Worker URL as automatic fallback in the downloaded script
+        script = script.replace('CF_URL="${_CLI_CF:-${CF_URL:-${S7_CF_URL:-}}}"', `CF_URL="\${_CLI_CF:-\${CF_URL:-\${S7_CF_URL:-${url.origin}}}}"`);
+        return new Response(script, {
+          status: 200,
+          headers: { ...CORS_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
+    if (pathName === "/s7.ps1" || pathName === "/ps1") {
+      const ghResp = await fetch("https://raw.githubusercontent.com/Amalekh-Biju/s7-lab/main/s7.ps1");
+      if (ghResp.ok) {
+        let script = await ghResp.text();
+        script = script.replace('$Cfg = @{', `$Cfg = @{ cf_default = "${url.origin}";`);
+        return new Response(script, {
+          status: 200,
+          headers: { ...CORS_HEADERS, "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+    }
+
     if (pathName === "/" || pathName === "/help" || pathName === "/health") {
       const helpText = [
-        "S7 Lab — Quick Terminal Cheat Sheet",
+        "S7 Lab — Quick Terminal Cheat Sheet (Cloudflare Proxy)",
         "",
         "1. Download & Start Interactive Tool (Ubuntu / Linux):",
-        "   curl -sL https://arxec-lab.vercel.app/s7 -o s7 && chmod +x s7 && ./s7",
+        `   curl -sL ${url.origin}/s7 -o s7 && chmod +x s7 && ./s7`,
         "",
         "2. Once Downloaded, Use ./s7 Commands:",
         "   ./s7              # Interactive menu (Arrows or 1-8, c=cmds, s=search, a=AI)",
@@ -470,6 +495,11 @@ export default {
         "3. Direct curl Commands (Without downloading s7):",
         `   curl -sL ${url.origin}/1   (or /2 .. /8 for any experiment)`,
         `   curl -sL ${url.origin}/ask -d "your question here"`,
+        "",
+        "4. Windows PowerShell (use 'irm' or 'curl.exe'):",
+        `   irm ${url.origin}`,
+        `   irm ${url.origin}/s7.ps1 -OutFile s7.ps1; .\\s7.ps1`,
+        `   curl.exe -sL ${url.origin}/7`,
       ].join("\n");
       return new Response(helpText + "\n", {
         status: 200,
