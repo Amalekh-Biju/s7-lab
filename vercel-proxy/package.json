@@ -1,0 +1,9 @@
+{
+  "name": "s7-lab-vercel-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node api/index.js",
+    "deploy": "npx vercel --prod"
+  }
+}

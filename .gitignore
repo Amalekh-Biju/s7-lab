@@ -1,0 +1,8 @@
+.s7config
+.s7config.json
+.env
+.env.local
+.dev.vars
+node_modules/
+.vercel/
+.wrangler/
