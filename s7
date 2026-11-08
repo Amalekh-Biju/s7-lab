@@ -5,6 +5,7 @@ set -u
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$DIR/.env"
 CFG="$DIR/.s7config"
+HIST_FILE="$DIR/.s7chat_history"
 
 [ -f "$ENV_FILE" ] && set -a && source "$ENV_FILE" && set +a
 [ -f "$CFG" ] && source "$CFG"
@@ -12,6 +13,7 @@ CFG="$DIR/.s7config"
 VERCEL_URL="${VERCEL_URL:-${S7_VERCEL_URL:-}}"
 CF_URL="${CF_URL:-${S7_CF_URL:-}}"
 API_KEY="${API_KEY:-${S7_API_KEY:-${GEMINI_API_KEY:-}}}"
+ACTIVE_EXP=""
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     B=$'\033[1m' D=$'\033[2m' G=$'\033[32m' C=$'\033[36m' Y=$'\033[33m' M=$'\033[35m' R=$'\033[0m' REV=$'\033[7m'
@@ -32,7 +34,8 @@ ${B}Direct Terminal Commands:${R}
   ${G}./s7 c <1-8>${R}            ${B}Commands-Only mode${R} (only commands & payloads, e.g. ${G}./s7 c 7${R})
   ${G}./s7 list${R}               List all 8 experiments
   ${G}./s7 s <keyword>${R}        Search across all experiments (e.g. ${G}./s7 s sqlmap${R})
-  ${G}./s7 ai "<question>"${R}    Ask AI via proxy or free-tier fallback
+  ${G}./s7 ai "<question>"${R}    Ask AI (remembers history for follow-ups; ${G}./s7 ai clear${R} to reset)
+  ${G}./s7 ai${R}                 Open continuous multi-turn AI chat session
   ${G}./s7 cfg${R}                Set Vercel / Cloudflare proxy URLs
   ${G}./s7 help${R}               Show this help guide
 
@@ -644,36 +647,90 @@ clean_output() {
     sed 's/\\n/\n/g; s/\\"/\"/g; s/\\\\/\\/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g' | sed '/^```/d'
 }
 
-ask_ai() {
-    local q="$*"
-    [ -z "$q" ] && read -r -p "${B}${C}ai> ${R}" q
-    [ -z "$q" ] && return 0
+LAB_CONTEXT="You are a concise Linux terminal assistant for B.Tech CSE Cyber Security S7 Lab (Ubuntu/Kali). Give brief, copy-paste ready commands/payloads.
+Lab Syllabus:
+Exp 1: Recon concepts (Passive: theHarvester, Maltego, Recon-ng, Shodan | Active: Nmap, Burp, ZAP, Nikto, Gobuster, FFUF).
+Exp 2: Recon-ng on tesla.com (workspaces create testspace; modules: recon/domains-hosts/hackertarget, recon/domains-contacts/whois_pocs, recon/domains-hosts/brute_hosts, recon/domains-hosts/bing_domain_web; options set SOURCE tesla.com; run; show hosts).
+Exp 3: Maltego (Footprint L1 testphp.vulnweb.com), Nmap (-sn, -sV, -O, -p-, -A, -Pn, -T4, -F), Gobuster (gobuster dir -u http://<IP> -w /usr/share/wordlists/dirb/common.txt), FFUF (ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt).
+Exp 4: DNSRecon (dnsrecon -d tesla.com -t std --xml tesla_dns.xml; -t brt -D subdomains.txt), theHarvester (-d tesla.com -b bing), Dig (dig tesla.com, +short NS/MX), Google Dorks (inurl:admin, intitle:login, filetype:php).
+Exp 5: WPScan (wpscan --url http://<IP> --enumerate u,vp,vt), NVD (CVE/CVSS/CWE), OWASP ZAP (127.0.0.1:8080, Traditional/AJAX Spider, Active Scan), Hydra (hydra -l elliot -P rockyou.txt <IP> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password').
+Exp 6: OWASP Juice Shop (:42000). Firefox localhost proxy fix: about:config -> network.proxy.allow_hijacking_localhost=true. Burp Intruder Cluster Bomb on login (uncheck '.' in Payload Encoding; finds admin@juice-sh.op:admin123). Jim reset (jim@juice-sh.op, Star Trek Kirk's eldest brother's middle name = Samuel).
+Exp 7: DVWA SQLi & Blind SQLi (Low security, admin:password). Classic: 1', 1' OR '1'='1, 1' UNION SELECT null, version() #, 1' UNION SELECT null, table_name FROM information_schema.tables #, 1' UNION SELECT user, password FROM users #. Blind: 1' AND 1=1 #, 1' AND SUBSTRING(database(),1,1)='d' #. SQLMap: sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=<COOKIE>; security=low\" -D dvwa -T users --dump --batch --threads 5.
+Exp 8: DVWA XSS (Low). Stored HTML: <h1>Website Defaced by Student</h1>; Cookie theft: <script>alert('Cookies: ' + document.cookie)</script>; Reflected: <button onclick=\"alert('1')\">Click Me!</button>; DOM URL: ?default=<script>alert('DOM XSS')</script>; Stored Event: <div onmouseover=alert(1)>Hover</div>."
 
+send_ai_query() {
+    local q="$1"
+    if [ "${q,,}" = "clear" ] || [ "${q,,}" = "/clear" ]; then
+        rm -f "$HIST_FILE"
+        echo "Conversation history cleared."
+        return 0
+    fi
+
+    local recent_hist=""
+    [ -f "$HIST_FILE" ] && recent_hist=$(tail -n 16 "$HIST_FILE")
+
+    local full_prompt="$LAB_CONTEXT"
+    [ -n "$ACTIVE_EXP" ] && full_prompt="$full_prompt
+[User is currently viewing Experiment $ACTIVE_EXP]"
+    [ -n "$recent_hist" ] && full_prompt="$full_prompt
+
+Recent Conversation History:
+$recent_hist"
+    full_prompt="$full_prompt
+
+User: $q"
+
+    local ans=""
     for ep in "${VERCEL_URL%/}" "${CF_URL%/}"; do
         [ -z "$ep" ] && continue
         local res
-        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" ${API_KEY:+-H "X-API-Key: $API_KEY"} -d "$q" 2>/dev/null) && [ -n "$res" ]; then
-            echo "$res" | clean_output
-            return 0
+        if res=$(curl -sS --max-time 35 -X POST "$ep/ask" ${API_KEY:+-H "X-API-Key: $API_KEY"} -d "$full_prompt" 2>/dev/null) && [ -n "$res" ]; then
+            ans=$(echo "$res" | clean_output)
+            break
         fi
     done
 
-    if [ -n "$API_KEY" ]; then
+    if [ -z "$ans" ] && [ -n "$API_KEY" ]; then
         local esc_q
-        esc_q=$(printf '%s' "Concise Linux terminal answer (commands only where possible): $q" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+        esc_q=$(printf '%s' "$full_prompt" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
         for m in gemini-3.5-flash-lite gemini-3.1-flash-lite gemini-2.5-flash gemma-4-26b-a4b-it; do
             local raw
             raw=$(curl -sS --max-time 25 "https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}" \
                 -H "Content-Type: application/json" \
                 -d "{\"contents\":[{\"parts\":[{\"text\":\"${esc_q}\"}]}]}" 2>/dev/null || true)
             if echo "$raw" | grep -q '"text"'; then
-                echo "$raw" | tr '\n' ' ' | grep -o '"text"[[:space:]]*:[[:space:]]*"\([^"\\]\|\\.\)*"' | tail -n 1 | sed 's/^"text"[[:space:]]*:[[:space:]]*"//; s/"$//' | clean_output
-                return 0
+                ans=$(echo "$raw" | tr '\n' ' ' | grep -o '"text"[[:space:]]*:[[:space:]]*"\([^"\\]\|\\.\)*"' | tail -n 1 | sed 's/^"text"[[:space:]]*:[[:space:]]*"//; s/"$//' | clean_output)
+                break
             fi
         done
     fi
+
+    if [ -n "$ans" ]; then
+        printf "%s\n" "$ans"
+        {
+            printf "User: %s\n" "$q"
+            printf "Assistant: %s\n" "$(echo "$ans" | tr '\n' ' ' | cut -c 1-400)"
+        } >> "$HIST_FILE"
+        return 0
+    fi
+
     echo "Error: Set your proxy URL via './s7 cfg --vercel <URL>' (or set GEMINI_API_KEY in .env)." >&2
     return 1
+}
+
+ask_ai() {
+    if [ $# -gt 0 ] && [ -n "$*" ]; then
+        send_ai_query "$*"
+        return $?
+    fi
+    printf "%sContinuous AI Chat%s %s(Lab context active • type 'clear' to reset history, 'q' to exit)%s\n" "$B$C" "$R" "$D" "$R"
+    while true; do
+        read -r -p "${B}${C}ai${ACTIVE_EXP:+ (exp $ACTIVE_EXP)}> ${R}" q || break
+        [ -z "$q" ] && continue
+        [[ "${q,,}" =~ ^(q|quit|exit|b|back)$ ]] && break
+        send_ai_query "$q"
+        echo ""
+    done
 }
 
 search_exps() {
@@ -716,9 +773,10 @@ view_exp_loop() {
     local curr="$1"
     local mode="${2:-full}"
     while true; do
+        ACTIVE_EXP="$curr"
         clear 2>/dev/null || true
         show_exp "$curr" "$mode"
-        printf "\n%s[c] cmds-only  [f] full instructions  [n] next  [p] prev  [1-8] jump  [a] AI  [h] help  [b] menu  [q] quit%s\n" "$D" "$R"
+        printf "\n%s[c] cmds-only  [f] full instructions  [n] next  [p] prev  [1-8] jump  [a] AI chat  [h] help  [b] menu  [q] quit%s\n" "$D" "$R"
         read -r -p "${B}${C}exp $curr ($mode)> ${R}" act
         case "${act,,}" in
             c|cmds) mode="cmds" ;;
@@ -726,10 +784,10 @@ view_exp_loop() {
             n|"")   curr=$(( curr < 8 ? curr + 1 : 1 )) ;;
             p)      curr=$(( curr > 1 ? curr - 1 : 8 )) ;;
             [1-8])  curr="$act" ;;
-            a|ai)   ask_ai ""; read -r -p "${D}[Enter]${R}" _ ;;
+            a|ai)   echo ""; ask_ai ;;
             s)      search_exps ""; read -r -p "${D}[Enter]${R}" _ ;;
             h|help) clear; show_help; read -r -p "${D}[Enter]${R}" _ ;;
-            b|m)    break ;;
+            b|m)    ACTIVE_EXP=""; break ;;
             q|quit) exit 0 ;;
         esac
     done
@@ -774,7 +832,7 @@ menu() {
                 [0-7]) view_exp_loop "$((sel+1))" "full" ;;
                 8)     echo ""; read -r -p "Experiment (1-8) for Commands-Only: " cn; [[ "$cn" =~ ^[1-8]$ ]] && view_exp_loop "$cn" "cmds" ;;
                 9)     echo ""; search_exps ""; read -r -p "${D}[Enter]${R}" _ ;;
-                10)    echo ""; ask_ai ""; read -r -p "${D}[Enter]${R}" _ ;;
+                10)    echo ""; ask_ai ;;
                 11)    clear; show_help; echo ""; read -r -p "${D}[Enter]${R}" _ ;;
                 12)    echo ""; config_proxy; read -r -p "${D}[Enter]${R}" _ ;;
                 13)    exit 0 ;;
@@ -784,7 +842,7 @@ menu() {
                 [1-8]) view_exp_loop "$k" "full" ;;
                 c)     echo ""; read -r -p "Experiment (1-8) for Commands-Only: " cn; [[ "$cn" =~ ^[1-8]$ ]] && view_exp_loop "$cn" "cmds" ;;
                 s)     echo ""; search_exps ""; read -r -p "${D}[Enter]${R}" _ ;;
-                a)     echo ""; ask_ai ""; read -r -p "${D}[Enter]${R}" _ ;;
+                a)     echo ""; ask_ai ;;
                 h|\?)  clear; show_help; echo ""; read -r -p "${D}[Enter]${R}" _ ;;
                 q)     exit 0 ;;
             esac
@@ -800,7 +858,8 @@ case "$cmd" in
     c|cmd|cmds)         show_exp "${1:-1}" "cmds" ;;
     l|ls|list)          printf "%s\n" "${ITEMS[@]:0:8}" ;;
     s|search)           search_exps "$@" ;;
-    a|ai|ask)           ask_ai "$@" ;;
+    a|ai|ask|chat)      ask_ai "$@" ;;
+    clear)              rm -f "$HIST_FILE" && echo "Conversation history cleared." ;;
     h|help|-h|--help)   show_help ;;
     cfg|config)         config_proxy "$@" ;;
     *)                  search_exps "$cmd" "$@" ;;

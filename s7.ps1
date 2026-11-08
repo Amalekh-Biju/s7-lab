@@ -258,28 +258,70 @@ function Show-Exp([int]$n, [bool]$CmdsOnly = $false) {
     }
 }
 
-function Ask-AI([string]$q) {
-    if (-not $q) { $q = Read-Host "ai" }
-    if (-not $q) { return }
+$HistFile = Join-Path $PSScriptRoot ".s7chat_history"
+$LabContext = @"
+You are a concise terminal Cyber Security Lab Assistant for B.Tech CSE S7 Lab (Ubuntu/Kali). Give brief, copy-paste ready commands/payloads.
+Lab Syllabus:
+Exp 1: Recon concepts (Passive: theHarvester, Maltego, Recon-ng, Shodan | Active: Nmap, Burp, ZAP, Nikto, Gobuster, FFUF).
+Exp 2: Recon-ng on tesla.com (workspaces create testspace; modules: recon/domains-hosts/hackertarget, recon/domains-contacts/whois_pocs, recon/domains-hosts/brute_hosts, recon/domains-hosts/bing_domain_web; options set SOURCE tesla.com; run; show hosts).
+Exp 3: Maltego (Footprint L1 testphp.vulnweb.com), Nmap (-sn, -sV, -O, -p-, -A, -Pn, -T4, -F), Gobuster (gobuster dir -u http://<IP> -w /usr/share/wordlists/dirb/common.txt), FFUF (ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt).
+Exp 4: DNSRecon (dnsrecon -d tesla.com -t std --xml tesla_dns.xml; -t brt -D subdomains.txt), theHarvester (-d tesla.com -b bing), Dig (dig tesla.com, +short NS/MX), Google Dorks (inurl:admin, intitle:login, filetype:php).
+Exp 5: WPScan (wpscan --url http://<IP> --enumerate u,vp,vt), NVD (CVE/CVSS/CWE), OWASP ZAP (127.0.0.1:8080, Spider, Active Scan), Hydra (hydra -l elliot -P rockyou.txt <IP> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password').
+Exp 6: OWASP Juice Shop (:42000). Firefox localhost proxy fix: about:config -> network.proxy.allow_hijacking_localhost=true. Burp Intruder Cluster Bomb on login (uncheck '.' in Payload Encoding; finds admin@juice-sh.op:admin123). Jim reset (jim@juice-sh.op, Star Trek Kirk's eldest brother's middle name = Samuel).
+Exp 7: DVWA SQLi & Blind SQLi (Low security, admin:password). Classic: 1', 1' OR '1'='1, 1' UNION SELECT null, version() #, 1' UNION SELECT null, table_name FROM information_schema.tables #, 1' UNION SELECT user, password FROM users #. Blind: 1' AND 1=1 #, 1' AND SUBSTRING(database(),1,1)='d' #. SQLMap: sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=<COOKIE>; security=low" -D dvwa -T users --dump --batch --threads 5.
+Exp 8: DVWA XSS (Low). Stored HTML: <h1>Website Defaced by Student</h1>; Cookie theft: <script>alert('Cookies: ' + document.cookie)</script>; Reflected: <button onclick="alert('1')">Click Me!</button>; DOM URL: ?default=<script>alert('DOM XSS')</script>; Stored Event: <div onmouseover=alert(1)>Hover</div>.
+"@
+
+function Send-AIQuery([string]$q) {
+    if ($q.ToLower() -in @("clear", "/clear")) {
+        if (Test-Path $HistFile) { Remove-Item $HistFile -Force }
+        Write-Host "Conversation history cleared." -ForegroundColor Yellow
+        return
+    }
+    $hist = if (Test-Path $HistFile) { (Get-Content $HistFile -Tail 16) -join "`n" } else { "" }
+    $fullPrompt = "$LabContext`n"
+    if ($hist) { $fullPrompt += "`nRecent Conversation History:`n$hist`n" }
+    $fullPrompt += "`nUser: $q"
+
+    $ans = ""
     foreach ($u in @($Cfg.vercel, $Cfg.cf)) {
         if (-not $u) { continue }
         try {
-            $res = Invoke-RestMethod -Uri ($u.TrimEnd('/') + "/ask") -Method Post -Body $q -TimeoutSec 35
-            Write-Host ($res -replace '```[a-z]*', '').Trim()
-            return
+            $res = Invoke-RestMethod -Uri ($u.TrimEnd('/') + "/ask") -Method Post -Body $fullPrompt -TimeoutSec 35
+            $ans = ($res -replace '```[a-z]*', '').Trim()
+            if ($ans) { break }
         } catch {}
     }
-    if ($Cfg.key) {
+    if (-not $ans -and $Cfg.key) {
         foreach ($m in @("gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash", "gemma-4-26b-a4b-it")) {
             try {
-                $body = @{ contents = @(@{ parts = @(@{ text = "Concise terminal answer: $q" }) }) } | ConvertTo-Json -Depth 5
+                $body = @{ contents = @(@{ parts = @(@{ text = $fullPrompt }) }) } | ConvertTo-Json -Depth 5
                 $r = Invoke-RestMethod -Uri "https://generativelanguage.googleapis.com/v1beta/models/$($m):generateContent?key=$($Cfg.key)" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 25
-                Write-Host ($r.candidates[0].content.parts[0].text -replace '```[a-z]*', '').Trim()
-                return
+                $ans = ($r.candidates[0].content.parts[0].text -replace '```[a-z]*', '').Trim()
+                if ($ans) { break }
             } catch {}
         }
     }
+    if ($ans) {
+        Write-Host $ans
+        $shortAns = ($ans -replace "`r?`n", " ")
+        if ($shortAns.Length -gt 400) { $shortAns = $shortAns.Substring(0, 400) }
+        Add-Content -Path $HistFile -Value "User: $q`nAssistant: $shortAns"
+        return
+    }
     Write-Host "Error: Set proxy URL via '.\s7.ps1 cfg' (or set GEMINI_API_KEY in .env)." -ForegroundColor Red
+}
+
+function Ask-AI([string]$q) {
+    if ($q) { Send-AIQuery $q; return }
+    Write-Host "Continuous AI Chat (Lab context active • type 'clear' to reset, 'q' to exit)" -ForegroundColor Cyan
+    while ($true) {
+        $in = (Read-Host "ai").Trim()
+        if (-not $in) { continue }
+        if ($in.ToLower() -in @("q", "quit", "exit", "b", "back")) { break }
+        Send-AIQuery $in
+        Write-Host ""
+    }
 }
 
 if ($Cmd -match '^[1-8]$') { Show-Exp ([int]$Cmd) $false; exit }

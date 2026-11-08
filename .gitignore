@@ -1,5 +1,6 @@
 .s7config
 .s7config.json
+.s7chat_history
 .env
 .env.local
 .dev.vars
