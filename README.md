@@ -15,6 +15,11 @@ Or launch the full tool directly in 1 line:
 curl -sL arxec-lab.vercel.app/s7 -o s7 && bash s7
 ```
 
+**Mobile / Bus Terminal Reader (No Laptop Needed):**
+Open in your phone browser (works offline once loaded):
+- Vercel: `https://arxec-lab.vercel.app/m`
+- Cloudflare: `https://<your-worker>.workers.dev/m`
+
 ---
 
 Terminal reference for all 8 S7 Cyber Security Lab experiments + Vercel/Cloudflare AI proxy.

