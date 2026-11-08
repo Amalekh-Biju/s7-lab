@@ -526,12 +526,38 @@ module.exports = async function handler(req, res) {
     }
   }
 
+  if (pathName === "/s7" || pathName === "/cli") {
+    for (const p of [path.join(__dirname, "../s7"), path.join(__dirname, "../../s7")]) {
+      if (fs.existsSync(p)) {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        return res.end(fs.readFileSync(p, "utf8"));
+      }
+    }
+  }
+
+  if (pathName === "/s7.ps1" || pathName === "/ps1") {
+    for (const p of [path.join(__dirname, "../s7.ps1"), path.join(__dirname, "../../s7.ps1")]) {
+      if (fs.existsSync(p)) {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        return res.end(fs.readFileSync(p, "utf8"));
+      }
+    }
+  }
+
   if (pathName === "/" || pathName === "/help" || pathName === "/health" || pathName === "/api/health") {
     const helpText = [
       "S7 Lab AI Proxy + Server-Side RAG (Online)",
       "",
-      `  curl -s "${baseUrl}/ask?q=exp+7+sqlmap+command"`,
-      `  curl -s "${baseUrl}/ask" -H "Content-Type: text/plain" -d "how to fix burp localhost in exp 6"`,
+      "1. Download & Run Full CLI (Ubuntu / Linux):",
+      `   curl -sL ${baseUrl}/s7 -o s7 && chmod +x s7 && ./s7`,
+      "",
+      "2. Download & Run Full CLI (Windows PowerShell):",
+      `   irm ${baseUrl}/s7.ps1 -OutFile s7.ps1; .\\s7.ps1`,
+      "",
+      "3. Direct AI Query (No download):",
+      `   curl -s "${baseUrl}/ask?q=exp+7+sqlmap+command"`,
     ].join("\n");
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
