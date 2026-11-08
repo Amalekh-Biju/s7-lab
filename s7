@@ -649,6 +649,27 @@ clean_output() {
     sed 's/\\n/\n/g; s/\\"/\"/g; s/\\\\/\\/g; s/\\u003c/</g; s/\\u003e/>/g; s/\\u0026/\&/g' | sed '/^```/d'
 }
 
+retrieve_local_rag() {
+    local text="${1,,} ${ACTIVE_EXP:+exp $ACTIVE_EXP}"
+    local matched=()
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*1|passive|active|familiarization|shodan|nikto|ethics) ]] && matched+=(1)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*2|pract(ical)?[[:space:]]*1|recon-?ng|hackertarget|whois_pocs|brute_hosts|bing_domain) ]] && matched+=(2)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*3|pract(ical)?[[:space:]]*2|maltego|nmap|gobuster|ffuf|footprint|common\.txt) ]] && matched+=(3)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*4|pract(ical)?[[:space:]]*3|dnsrecon|theharvester|dig|dork|inurl|intitle) ]] && matched+=(4)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*5|pract(ical)?[[:space:]]*4|wpscan|zap|zaproxy|hydra|nvd|cve|cwe|wordpress|rockyou|elliot) ]] && matched+=(5)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*6|pract(ical)?[[:space:]]*5|juice|burp|intruder|cluster[[:space:]]*bomb|samuel|jim|42000|allow_hijacking) ]] && matched+=(6)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*7|pract(ical)?[[:space:]]*6|sqli|sql[[:space:]]*injection|sqlmap|blind|union|dvwa|phpsessid) ]] && matched+=(7)
+    [[ "$text" =~ (exp(eriment)?[[:space:]]*8|pract(ical)?[[:space:]]*7|xss|client-?side|html[[:space:]]*injection|cookie|onmouseover|onerror|dom) ]] && matched+=(8)
+
+    local count=0
+    for id in "${matched[@]}"; do
+        NO_COLOR=1 show_exp "$id" "full"
+        echo ""
+        count=$((count + 1))
+        [ "$count" -ge 2 ] && break
+    done
+}
+
 send_ai_query() {
     local q="$1"
     if [ "${q,,}" = "clear" ] || [ "${q,,}" = "/clear" ]; then
@@ -660,12 +681,21 @@ send_ai_query() {
         return 0
     fi
 
-    local payload="$q"
-    if [ -f "$HIST_FILE" ]; then
-        local recent
-        recent=$(tail -n 8 "$HIST_FILE")
-        [ -n "$recent" ] && payload=$(printf "Recent Conversation:\n%s\n\nUser: %s" "$recent" "$q")
-    fi
+    local recent=""
+    [ -f "$HIST_FILE" ] && recent=$(tail -n 8 "$HIST_FILE")
+
+    local local_rag
+    local_rag=$(retrieve_local_rag "$q $recent")
+
+    local payload=""
+    [ -n "$local_rag" ] && payload="Local Lab Context (RAG):
+$local_rag
+"
+    [ -n "$recent" ] && payload="${payload}Recent Conversation:
+$recent
+
+"
+    payload="${payload}User: $q"
 
     local ans=""
     for ep in "${VERCEL_URL%/}" "${CF_URL%/}"; do
@@ -673,6 +703,7 @@ send_ai_query() {
         local res
         if res=$(curl -sS --max-time 35 -X POST "$ep/ask" \
             -H "Content-Type: text/plain" \
+            -H "X-Client-RAG: 1" \
             ${ACTIVE_EXP:+-H "X-Exp: $ACTIVE_EXP"} \
             ${API_KEY:+-H "X-API-Key: $API_KEY"} \
             --data-raw "$payload" 2>/dev/null) && [ -n "$res" ] && ! [[ "$res" == "[ERROR]"* ]]; then

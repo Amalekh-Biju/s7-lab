@@ -305,7 +305,8 @@ async function handleAIRequest(reqBody, env, headers, sessionId = "default") {
   const history = Array.isArray(reqBody.history) && reqBody.history.length > 0 ? reqBody.history : storedHistory;
   const activeExp = reqBody.exp || headers.get("x-exp") || "";
 
-  const ragContext = retrieveLabRAG(prompt, history, activeExp);
+  const hasClientRAG = Boolean(headers.get("x-client-rag")) || prompt.includes("Local Lab Context (RAG):");
+  const ragContext = hasClientRAG ? LAB_INDEX : retrieveLabRAG(prompt, history, activeExp);
   let system = `You are a concise, terminal-friendly Cyber Security Lab Assistant for Ubuntu Linux & Kali. Give brief, copy-paste ready terminal commands and payloads without fluff.\n\n${ragContext}`;
 
   let webSources = [];

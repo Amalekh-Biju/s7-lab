@@ -260,6 +260,22 @@ function Show-Exp([int]$n, [bool]$CmdsOnly = $false) {
 
 $HistFile = Join-Path $PSScriptRoot ".s7chat_history"
 
+function Get-LocalRAG([string]$text) {
+    $t = $text.ToLower()
+    $ids = @()
+    if ($t -match 'exp(eriment)?\s*1|passive|active|familiarization|shodan|nikto|ethics') { $ids += 1 }
+    if ($t -match 'exp(eriment)?\s*2|pract(ical)?\s*1|recon-?ng|hackertarget|whois_pocs|brute_hosts|bing_domain') { $ids += 2 }
+    if ($t -match 'exp(eriment)?\s*3|pract(ical)?\s*2|maltego|nmap|gobuster|ffuf|footprint|common\.txt') { $ids += 3 }
+    if ($t -match 'exp(eriment)?\s*4|pract(ical)?\s*3|dnsrecon|theharvester|dig|dork|inurl|intitle') { $ids += 4 }
+    if ($t -match 'exp(eriment)?\s*5|pract(ical)?\s*4|wpscan|zap|zaproxy|hydra|nvd|cve|cwe|wordpress|rockyou|elliot') { $ids += 5 }
+    if ($t -match 'exp(eriment)?\s*6|pract(ical)?\s*5|juice|burp|intruder|cluster\s*bomb|samuel|jim|42000|allow_hijacking') { $ids += 6 }
+    if ($t -match 'exp(eriment)?\s*7|pract(ical)?\s*6|sqli|sql\s*injection|sqlmap|blind|union|dvwa|phpsessid') { $ids += 7 }
+    if ($t -match 'exp(eriment)?\s*8|pract(ical)?\s*7|xss|client-?side|html\s*injection|cookie|onmouseover|onerror|dom') { $ids += 8 }
+    $chunks = @()
+    foreach ($id in ($ids | Select-Object -First 2)) { $chunks += $FullExps[$id] }
+    return ($chunks -join "`n`n")
+}
+
 function Send-AIQuery([string]$q) {
     if ($q.ToLower() -in @("clear", "/clear")) {
         if (Test-Path $HistFile) { Remove-Item $HistFile -Force }
@@ -267,13 +283,17 @@ function Send-AIQuery([string]$q) {
         return
     }
     $hist = if (Test-Path $HistFile) { (Get-Content $HistFile -Tail 8) -join "`n" } else { "" }
-    $payload = if ($hist) { "Recent Conversation:`n$hist`n`nUser: $q" } else { $q }
+    $rag = Get-LocalRAG "$q $hist"
+    $payload = ""
+    if ($rag) { $payload += "Local Lab Context (RAG):`n$rag`n`n" }
+    if ($hist) { $payload += "Recent Conversation:`n$hist`n`n" }
+    $payload += "User: $q"
 
     $ans = ""
     foreach ($u in @($Cfg.vercel, $Cfg.cf)) {
         if (-not $u) { continue }
         try {
-            $res = Invoke-RestMethod -Uri ($u.TrimEnd('/') + "/ask") -Method Post -ContentType "text/plain; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($payload)) -TimeoutSec 35
+            $res = Invoke-RestMethod -Uri ($u.TrimEnd('/') + "/ask") -Method Post -Headers @{ "X-Client-RAG" = "1" } -ContentType "text/plain; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($payload)) -TimeoutSec 35
             if ($res -and -not $res.StartsWith("[ERROR]")) {
                 $ans = ($res -replace '```[a-z]*', '').Trim()
                 if ($ans) { break }
