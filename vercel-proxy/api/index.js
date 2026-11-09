@@ -343,6 +343,8 @@ async function callGemini({ apiKey, model, prompt, system, history }) {
   throw new Error(lastErrors.join(" | "));
 }
 
+const FREE_TIER_GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"];
+
 async function callOpenAICompatible({ endpoint, apiKey, model, prompt, system, history, providerLabel }) {
   const messages = [];
   if (system) messages.push({ role: "system", content: system });
@@ -355,23 +357,35 @@ async function callOpenAICompatible({ endpoint, apiKey, model, prompt, system, h
   }
   messages.push({ role: "user", content: prompt });
 
-  const resp = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ model, messages, temperature: 0.3 }),
-  });
+  const modelsToTry =
+    providerLabel === "groq"
+      ? [model, ...FREE_TIER_GROQ_MODELS.filter((m) => m !== model)].filter(Boolean)
+      : [model];
+  const keys = String(apiKey).split(",").map((k) => k.trim()).filter(Boolean);
+  const errs = [];
 
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`${providerLabel} HTTP ${resp.status}: ${errText}`);
+  for (const k of keys) {
+    for (const m of modelsToTry) {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${k}`,
+        },
+        body: JSON.stringify({ model: m, messages, temperature: 0.3 }),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const rawReply = data.choices?.[0]?.message?.content || "";
+        const reply = rawReply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        return { reply, provider: `${providerLabel} (${m})`, sources: [] };
+      }
+      const errText = await resp.text();
+      errs.push(`${m} -> HTTP ${resp.status}: ${errText.slice(0, 120)}`);
+    }
   }
-
-  const data = await resp.json();
-  const reply = data.choices?.[0]?.message?.content || "";
-  return { reply, provider: `${providerLabel} (${model})`, sources: [] };
+  throw new Error(errs.join(" | "));
 }
 
 async function handleAIRequest(reqBody, env, reqHeaders, sessionId = "default") {
@@ -385,13 +399,13 @@ async function handleAIRequest(reqBody, env, reqHeaders, sessionId = "default") 
     return { data: { reply: "Conversation history cleared.", provider: "rag-session", sources: [] }, status: 200 };
   }
 
+  const storedHistory = SESSION_MEMORY.get(sessionId) || [];
+  const history = Array.isArray(reqBody.history) && reqBody.history.length > 0 ? reqBody.history : storedHistory;
+  const activeExp = reqBody.exp || reqHeaders["x-exp"] || "";
   const cacheKey = `${activeExp}:${prompt.toLowerCase().replace(/\s+/g, " ").slice(-240)}`;
   if (RESPONSE_CACHE.has(cacheKey)) {
     return { data: RESPONSE_CACHE.get(cacheKey), status: 200 };
   }
-  const storedHistory = SESSION_MEMORY.get(sessionId) || [];
-  const history = Array.isArray(reqBody.history) && reqBody.history.length > 0 ? reqBody.history : storedHistory;
-  const activeExp = reqBody.exp || reqHeaders["x-exp"] || "";
 
   // 1. Retrieve relevant Lab Manual chunks via Server-Side RAG (skip duplicate chunk if client already attached Local RAG)
   const hasClientRAG = Boolean(reqHeaders["x-client-rag"]) || prompt.includes("Local Lab Context (RAG):");
@@ -443,7 +457,7 @@ async function handleAIRequest(reqBody, env, reqHeaders, sessionId = "default") 
       callOpenAICompatible({
         endpoint: "https://api.groq.com/openai/v1/chat/completions",
         apiKey: groqKey,
-        model: reqBody.model || env.GROQ_MODEL || "llama-3.3-70b-versatile",
+        model: reqBody.model || env.GROQ_MODEL || "openai/gpt-oss-120b",
         prompt,
         system,
         history,
