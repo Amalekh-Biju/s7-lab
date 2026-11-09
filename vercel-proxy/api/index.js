@@ -24,9 +24,11 @@ const CORS_HEADERS = {
 const FREE_TIER_GEMINI_MODELS = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
+  "gemini-3.1-flash-lite-preview",
   "gemini-2.5-flash",
   "gemma-4-26b-a4b-it",
 ];
+const RESPONSE_CACHE = new Map();
 
 // In-memory conversation store per session/IP (persists across warm serverless invocations)
 const SESSION_MEMORY = new Map();
@@ -300,9 +302,11 @@ async function callGemini({ apiKey, model, prompt, system, history }) {
   }
   contents.push({ role: "user", parts: [{ text: prompt }] });
 
+  const keys = String(apiKey).split(",").map((k) => k.trim()).filter(Boolean);
   const lastErrors = [];
+  for (const k of keys) {
   for (const modelName of candidateModels) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${k}`;
     const isGemma = modelName.startsWith("gemma-");
     const body = isGemma
       ? {
@@ -333,6 +337,7 @@ async function callGemini({ apiKey, model, prompt, system, history }) {
 
     const errText = await resp.text();
     lastErrors.push(`${modelName} -> HTTP ${resp.status}: ${errText.slice(0, 150)}`);
+  }
   }
 
   throw new Error(lastErrors.join(" | "));
@@ -380,6 +385,10 @@ async function handleAIRequest(reqBody, env, reqHeaders, sessionId = "default") 
     return { data: { reply: "Conversation history cleared.", provider: "rag-session", sources: [] }, status: 200 };
   }
 
+  const cacheKey = `${activeExp}:${prompt.toLowerCase().replace(/\s+/g, " ").slice(-240)}`;
+  if (RESPONSE_CACHE.has(cacheKey)) {
+    return { data: RESPONSE_CACHE.get(cacheKey), status: 200 };
+  }
   const storedHistory = SESSION_MEMORY.get(sessionId) || [];
   const history = Array.isArray(reqBody.history) && reqBody.history.length > 0 ? reqBody.history : storedHistory;
   const activeExp = reqBody.exp || reqHeaders["x-exp"] || "";
@@ -488,6 +497,8 @@ async function handleAIRequest(reqBody, env, reqHeaders, sessionId = "default") 
         { role: "assistant", content: res.reply },
       ].slice(-12);
       SESSION_MEMORY.set(sessionId, updated);
+      if (RESPONSE_CACHE.size > 300) RESPONSE_CACHE.delete(RESPONSE_CACHE.keys().next().value);
+      RESPONSE_CACHE.set(cacheKey, res);
       return { data: res, status: 200 };
     } catch (e) {
       errors.push(e.message || String(e));
